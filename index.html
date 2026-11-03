@@ -816,15 +816,19 @@ async function loadNews() {
 }
 // 크롬 내장 번역기(기기 안에서 번역)를 먼저 쓰고, 없으면 키 없는 무료 번역(MyMemory, 하루 글자 수 제한)을 쓴다
 const transCache = new Map();
-let builtinTranslator = null;
+const EN_KO = {sourceLanguage: "en", targetLanguage: "ko"};
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("timeout")), ms))]);
+let builtinTranslator = null; // null: 아직 모름, false: 이번에는 못 씀
 async function translate(text) {
   if (transCache.has(text)) return transCache.get(text);
   let ko = null;
-  if ("Translator" in self) {
+  if ("Translator" in self && builtinTranslator !== false) {
     try {
-      builtinTranslator ??= Translator.create({sourceLanguage: "en", targetLanguage: "ko"});
-      ko = await (await builtinTranslator).translate(text);
-    } catch (e) { builtinTranslator = null; }
+      // 번역 모델을 이미 받아 둔 경우에만 쓴다. 받기 전이면 응답 없이 멈출 수 있어서 바로 무료 번역으로 넘어감
+      builtinTranslator ??= withTimeout(Translator.availability(EN_KO), 3000)
+        .then(a => a === "available" ? Translator.create(EN_KO) : Promise.reject(new Error(a)));
+      ko = await withTimeout((await withTimeout(builtinTranslator, 5000)).translate(text), 5000);
+    } catch (e) { builtinTranslator = false; }
   }
   const myMemory = async q => {
     const j = await (await fetch("https://api.mymemory.translated.net/get?langpair=en|ko&q=" + encodeURIComponent(q))).json();
