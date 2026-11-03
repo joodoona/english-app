@@ -1,0 +1,982 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>바보야 문제는 너야</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--text:#1d2330;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--ok:#15803d;--bad:#dc2626;--soft:#eef2ff;--me:#dbeafe}
+@media (prefers-color-scheme: dark){:root{--bg:#111318;--card:#1b1e26;--text:#e8eaf0;--muted:#9aa1ad;--line:#2b303b;--accent:#3b82f6;--ok:#4ade80;--bad:#f87171;--soft:#1e2740;--me:#1e3a5f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Malgun Gothic",sans-serif}
+main{max-width:720px;margin:0 auto;padding:16px}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px}
+h1{font-size:20px;margin:0}
+.ctrl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.hint{color:var(--muted);font-size:13px;margin:0 0 12px}
+.tabs{display:flex;gap:6px;margin-bottom:12px}
+.tabs button{flex:1}
+button,select{font:inherit;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);cursor:pointer}
+button.on,button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.6;cursor:default}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px}
+.en{font-size:18px;font-weight:600}
+.ko{color:var(--muted);font-size:14px}
+.row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.result{margin-top:8px}
+.trans{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--soft);font-size:15px}
+.w-ok{color:var(--ok)}
+.w-miss{color:var(--bad);text-decoration:underline}
+.pass{color:var(--ok);font-weight:700}
+.fail{color:var(--bad);font-weight:700}
+.count{font-weight:600;margin-bottom:10px}
+.scene{text-align:center;font-weight:700;margin:16px 0 8px}
+.bubble{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:6px 40px 6px 0}
+.bubble.me{background:var(--me);border-color:transparent;margin:6px 0 6px 40px;text-align:right}
+.optrow{display:flex;gap:6px;margin-top:6px}
+.opt{flex:1;text-align:left;background:var(--soft)}
+#rpmsg{color:var(--bad);margin-top:8px;font-size:14px}
+#warn{display:none;background:#fef3c7;color:#92400e;border-radius:8px;padding:10px;margin-bottom:12px}
+details summary{cursor:pointer;color:var(--muted);font-size:13px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🐕💬 바보야 문제는 너야</h1>
+    <div class="ctrl">
+      <label>난이도
+        <select id="level">
+          <option value="easy">초급</option>
+          <option value="mid">중급</option>
+          <option value="hard">고급</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="slow"> 🐢 느리게</label>
+    </div>
+  </header>
+  <p class="hint" id="levelHint"></p>
+  <div id="warn">이 브라우저는 음성 인식을 지원하지 않아요. <b>크롬</b>이나 <b>엣지</b>로 열어 주세요. (듣기는 가능)</div>
+  <div class="tabs">
+    <button id="tabDaily" class="on">📅 오늘의 문장</button>
+    <button id="tabStory">🎭 롤플레이</button>
+    <button id="tabNews">📰 오늘의 뉴스</button>
+  </div>
+
+  <section id="daily">
+    <label>문장 종류
+      <select id="kind">
+        <option value="mid">중급</option>
+        <option value="hard">고급</option>
+        <option value="travel">✈️ 여행</option>
+        <option value="mz">🔥 MZ 표현</option>
+      </select>
+    </label>
+    <button id="dailyNew">🔄 새 문장</button>
+    <p class="hint" id="dailySrc"></p>
+    <div class="count" id="count"></div>
+    <div id="cards"></div>
+  </section>
+
+  <section id="story" hidden>
+    <label>상황 <select id="storyPick"></select></label>
+    <div id="log"></div>
+    <div class="card" id="choices"></div>
+  </section>
+
+  <section id="news" hidden>
+    <div class="row">
+      <select id="section">
+        <option value="HomePage">주요 뉴스</option>
+        <option value="World">세계</option>
+        <option value="Business">비즈니스</option>
+        <option value="Technology">기술</option>
+        <option value="Arts">문화·예술</option>
+        <option value="Science">과학</option>
+        <option value="Health">건강</option>
+      </select>
+      <button class="primary" id="newsLoad">새로고침</button>
+    </div>
+    <p class="hint" id="newsMsg"></p>
+    <div id="newsCards"></div>
+    <p class="hint">출처: The New York Times RSS</p>
+  </section>
+</main>
+
+<script>
+// 오늘의 문장 목록. 종류마다 날짜에 따라 10개씩 골라 보여 준다
+const SENTENCES = {
+  mid: [
+    ["Would you mind closing the window?", "창문 좀 닫아 주시겠어요?"],
+    ["I've been learning English for two years.", "영어를 2년째 배우고 있어요."],
+    ["Could you recommend a good restaurant nearby?", "근처에 괜찮은 식당 추천해 주실래요?"],
+    ["I'm sorry, I didn't catch your name.", "죄송해요, 성함을 못 들었어요."],
+    ["What do you usually do on weekends?", "주말에는 보통 뭐 하세요?"],
+    ["I'm looking forward to seeing you again.", "다시 만나길 기대하고 있어요."],
+    ["Can we reschedule the meeting to Friday?", "회의를 금요일로 옮길 수 있을까요?"],
+    ["It took me an hour to get here.", "여기 오는 데 한 시간 걸렸어요."],
+    ["I'd rather stay home tonight.", "오늘 밤은 차라리 집에 있을래요."],
+    ["How long have you lived in this city?", "이 도시에 산 지 얼마나 됐어요?"],
+    ["Let me know if you need anything.", "필요한 거 있으면 말해 주세요."],
+    ["I'm thinking about changing my job.", "이직을 생각하고 있어요."],
+    ["The traffic was terrible this morning.", "오늘 아침 교통이 최악이었어요."],
+    ["Do you know how to get to the station?", "역에 어떻게 가는지 아세요?"],
+    ["I should have left earlier.", "더 일찍 나왔어야 했어요."],
+    ["That sounds like a great idea.", "좋은 생각 같아요."],
+    ["Could you give me a hand with this?", "이것 좀 도와주실래요?"],
+    ["I'm not sure what you mean.", "무슨 뜻인지 잘 모르겠어요."],
+    ["What made you decide to move here?", "왜 여기로 이사 오기로 했어요?"],
+    ["I'll get back to you by the end of the day.", "오늘 중으로 다시 연락드릴게요."],
+  ],
+  hard: [
+    ["If I had known about the delay, I would have taken a different route.", "지연될 줄 알았다면 다른 길로 갔을 거예요."],
+    ["I'd appreciate it if you could send me the details in advance.", "세부 내용을 미리 보내 주시면 감사하겠습니다."],
+    ["Despite the rain, the event turned out to be a huge success.", "비가 왔는데도 행사는 대성공이었어요."],
+    ["I'm not entirely convinced that this is the best approach.", "이게 최선의 방법인지 확신이 서지 않아요."],
+    ["It's been ages since we last caught up properly.", "제대로 얘기 나눈 지 정말 오래됐네요."],
+    ["Whether we like it or not, we have to adapt to the changes.", "좋든 싫든 변화에 적응해야 해요."],
+    ["Could you walk me through the process step by step?", "과정을 단계별로 설명해 주시겠어요?"],
+    ["I didn't mean to offend you, but I had to be honest.", "기분 상하게 하려던 건 아니지만 솔직해야 했어요."],
+    ["The more I think about it, the less sure I am.", "생각하면 할수록 확신이 줄어들어요."],
+    ["By the time we arrived, the movie had already started.", "우리가 도착했을 때는 영화가 이미 시작했어요."],
+    ["I'm torn between accepting the offer and staying where I am.", "제안을 받아들일지 지금 자리에 남을지 고민돼요."],
+    ["Let's not jump to conclusions before we hear the whole story.", "전체 이야기를 듣기 전에 성급히 결론 내리지 말아요."],
+    ["To be honest, I'm a bit overwhelmed with everything going on.", "솔직히 요즘 일어나는 일들 때문에 좀 벅차요."],
+    ["It would make a big difference if we could start a week earlier.", "일주일만 일찍 시작할 수 있으면 큰 차이가 날 거예요."],
+    ["I can't help feeling that we've overlooked something important.", "중요한 걸 놓친 것 같은 기분이 자꾸 들어요."],
+    ["Not only is it cheaper, but it's also much more convenient.", "더 저렴할 뿐 아니라 훨씬 편리하기도 해요."],
+    ["You'd better double-check the reservation before we leave.", "출발 전에 예약을 다시 확인하는 게 좋겠어요."],
+    ["I was wondering whether you'd be interested in joining us.", "혹시 저희와 함께하실 생각이 있으신지 궁금했어요."],
+    ["Had it not been for your advice, I would have given up.", "당신의 조언이 없었다면 포기했을 거예요."],
+    ["We need to strike a balance between quality and speed.", "품질과 속도 사이에서 균형을 잡아야 해요."],
+  ],
+  travel: [
+    ["Could you take a picture of us?", "저희 사진 좀 찍어 주시겠어요?"],
+    ["Is this seat taken?", "이 자리 주인 있나요?"],
+    ["How do I get to the airport?", "공항에 어떻게 가요?"],
+    ["Can I check in early?", "일찍 체크인할 수 있을까요?"],
+    ["Could I get a late checkout?", "늦게 체크아웃할 수 있을까요?"],
+    ["I'd like to check out, please.", "체크아웃할게요."],
+    ["Can I leave my luggage here?", "짐을 여기 맡겨도 될까요?"],
+    ["Where can I buy a ticket?", "표는 어디서 사요?"],
+    ["Does this bus go downtown?", "이 버스 시내로 가나요?"],
+    ["How long does it take to get there?", "거기까지 얼마나 걸려요?"],
+    ["Could you recommend a local dish?", "현지 음식 추천해 주실래요?"],
+    ["Can I see the menu, please?", "메뉴판 좀 볼 수 있을까요?"],
+    ["I'm allergic to nuts.", "저는 견과류 알레르기가 있어요."],
+    ["Could we get the check, please?", "계산서 주시겠어요?"],
+    ["Can I pay by card?", "카드로 계산해도 되나요?"],
+    ["Is the tip included?", "팁이 포함되어 있나요?"],
+    ["Do you have this in a smaller size?", "이거 더 작은 사이즈 있나요?"],
+    ["Can I try this on?", "이거 입어 봐도 돼요?"],
+    ["Is this on sale?", "이거 세일 중인가요?"],
+    ["Could you wrap it as a gift?", "선물 포장해 주실 수 있나요?"],
+    ["I think I'm lost.", "길을 잃은 것 같아요."],
+    ["Is it within walking distance?", "걸어갈 수 있는 거리인가요?"],
+    ["Could you call a taxi for me?", "택시 좀 불러 주시겠어요?"],
+    ["My flight has been delayed.", "비행기가 지연됐어요."],
+    ["Where is the baggage claim?", "수하물 찾는 곳이 어디예요?"],
+    ["I lost my passport.", "여권을 잃어버렸어요."],
+    ["Is there a pharmacy nearby?", "근처에 약국 있나요?"],
+    ["What time does it close?", "몇 시에 문 닫아요?"],
+    ["Can I get a refund?", "환불받을 수 있나요?"],
+    ["Do I need a reservation?", "예약이 필요한가요?"],
+  ],
+  mz: [
+    ["No cap, this is the best pizza I've ever had.", "진짜로, 이거 내가 먹어 본 피자 중 최고야. (no cap = 뻥 아니고 진짜)"],
+    ["That outfit is fire.", "그 옷 진짜 멋지다. (fire = 끝내준다)"],
+    ["I'm lowkey obsessed with this song.", "나 은근히 이 노래에 빠졌어. (lowkey = 은근히)"],
+    ["She totally slayed the presentation.", "그녀가 발표를 완전 찢었어. (slay = 찢었다, 끝내주게 해냈다)"],
+    ["It's giving main character energy.", "완전 주인공 느낌이야. (it's giving = ~ 느낌이다)"],
+    ["This place is a vibe.", "여기 분위기 완전 좋다. (a vibe = 분위기 좋은 것)"],
+    ["I'm dead, that's so funny.", "나 죽겠다, 너무 웃겨. (I'm dead = 웃겨 죽겠다)"],
+    ["Bet, see you at eight.", "콜, 8시에 봐. (bet = 좋아, 콜)"],
+    ["Say less, I'm in.", "더 말 안 해도 돼, 나 낄게. (say less = 바로 알겠어)"],
+    ["Honestly, that movie was mid.", "솔직히 그 영화 그저 그랬어. (mid = 평범한, 별로인)"],
+    ["He's acting kind of sus.", "그 사람 좀 수상해. (sus = 수상한)"],
+    ["She ghosted me after our second date.", "두 번째 데이트 후에 그녀가 잠수 탔어. (ghost = 연락 끊고 잠수 타다)"],
+    ["Spill the tea. What happened?", "썰 좀 풀어 봐. 무슨 일이야? (spill the tea = 가십을 털어놓다)"],
+    ["I have serious FOMO right now.", "지금 나만 놓치는 것 같아서 너무 아쉬워. (FOMO = 소외될까 봐 불안함)"],
+    ["You need to touch grass.", "너 밖에 나가서 바람 좀 쐬어야 해. (touch grass = 인터넷 그만하고 현실로)"],
+    ["That song lives in my head rent free.", "그 노래가 머릿속에서 안 떠나. (rent free = 자꾸 생각나는)"],
+    ["She ate and left no crumbs.", "그녀가 완벽하게 해냈어. (ate = 완벽하게 해냈다)"],
+    ["Okay, you're being a little delulu.", "야, 너 좀 망상이 심하다. (delulu = 망상에 빠진)"],
+    ["He has so much rizz.", "그 사람 매력 장난 아니야. (rizz = 이성을 끄는 매력)"],
+    ["This coffee hits different in the morning.", "이 커피는 아침에 마시면 느낌이 달라. (hits different = 유난히 좋다)"],
+    ["You understood the assignment.", "너 제대로 알고 해냈네. (understood the assignment = 기대에 딱 맞게 해냈다)"],
+    ["I got caught in 4K.", "나 빼도 박도 못하게 딱 걸렸어. (caught in 4K = 증거 확실하게 들킴)"],
+    ["Honestly, that gave me the ick.", "솔직히 그거 보고 정 떨어졌어. (the ick = 갑자기 확 깨는 느낌)"],
+    ["We're in a situationship.", "우리 썸인지 연애인지 애매한 사이야. (situationship = 애매한 관계)"],
+    ["That trip was a core memory.", "그 여행은 평생 기억에 남을 추억이야. (core memory = 소중한 기억)"],
+    ["Just let him cook.", "일단 하게 둬 봐. (let him cook = 지켜봐, 뭔가 해낼 거야)"],
+    ["I'm highkey stressed about the exam.", "나 시험 때문에 대놓고 스트레스받아. (highkey = 대놓고, 엄청)"],
+    ["It's the confidence for me.", "난 그 자신감이 포인트야. (it's the ~ for me = ~가 제일 마음에 든다)"],
+    ["I'm living my best life on vacation.", "휴가에서 인생 최고로 즐기는 중이야. (living my best life = 최고로 즐기며 사는 중)"],
+    ["That's so cringe.", "그거 너무 오글거려. (cringe = 오글거리는)"],
+    ["That's a huge red flag.", "그거 완전 위험 신호야. (red flag = 위험 신호, 걸리는 점)"],
+    ["He's such a green flag.", "그 사람 완전 괜찮은 사람이야. (green flag = 좋은 신호)"],
+    ["Not gonna lie, that was amazing.", "솔직히 그거 대박이었어. (not gonna lie = 솔직히)"],
+    ["Don't be so extra.", "너무 오버하지 마. (extra = 과한, 오버하는)"],
+    ["She's still salty about losing.", "걔 아직도 진 거 때문에 삐져 있어. (salty = 삐진, 뒤끝 있는)"],
+    ["Staying in bed all day is a big mood.", "하루 종일 침대에 있는 거, 완전 내 마음이야. (big mood = 완전 공감)"],
+    ["We vibed right away.", "우린 바로 잘 통했어. (vibe = 잘 맞다)"],
+    ["He's such a simp for her.", "걔는 그녀한테 완전 꼼짝 못 해. (simp = 좋아하는 사람에게 과하게 잘해 주는 사람)"],
+    ["Sorry, that's on me.", "미안, 그건 내 탓이야. (that's on me = 내 책임이야)"],
+    ["Messi is the GOAT.", "메시는 역대 최고야. (GOAT = Greatest Of All Time)"],
+    ["Your new shoes are sick.", "새 신발 끝내준다. (sick = 멋지다)"],
+    ["I'm shook, I didn't see that coming.", "충격이야, 그건 생각도 못 했어. (shook = 충격받은)"],
+    ["He's flexing his new car again.", "걔 또 새 차 자랑한다. (flex = 자랑하다)"],
+    ["Karaoke at two a.m.? Hard pass.", "새벽 2시에 노래방? 난 절대 안 가. (hard pass = 단칼에 거절)"],
+    ["I stan this band so much.", "나 이 밴드 완전 덕질해. (stan = 열성 팬이다)"],
+    ["Relax, it's not that deep.", "진정해, 그렇게 심각한 거 아니야. (not that deep = 별일 아니다)"],
+    ["He's acting like an NPC.", "걔 생각 없이 남들 따라 하기만 해. (NPC = 게임 속 엑스트라처럼 구는 사람)"],
+    ["Her glow up is unreal.", "걔 완전 환골탈태했어. (glow up = 확 멋있어지다)"],
+    ["Stop gatekeeping that cafe.", "그 카페 혼자만 알지 말고 좀 알려 줘. (gatekeep = 좋은 걸 독점하다)"],
+    ["I'm in my soft era right now.", "나 요즘 순한 모드야. (era = ~ 시기, ~ 모드)"],
+    ["Chips and cheese? That's girl dinner.", "과자랑 치즈? 그게 오늘 저녁이야. (girl dinner = 있는 걸로 대충 차린 저녁)"],
+    ["It was on sale, so girl math says it was free.", "세일이었으니까 계산상 공짜인 셈이야. (girl math = 소비 합리화 계산)"],
+    ["Pumpkin spice latte is so basic.", "호박 라떼는 너무 뻔해. (basic = 흔하고 뻔한)"],
+    ["Facts, I totally agree.", "팩트야, 완전 동의해. (facts = 맞는 말)"],
+    ["Your feelings are valid.", "네 감정은 충분히 그럴 만해. (valid = 타당한, 인정)"],
+    ["Quick vibe check, how's everyone doing?", "분위기 점검! 다들 기분 어때? (vibe check = 기분·분위기 확인)"],
+    ["He forgot her birthday? Big yikes.", "걔가 여자친구 생일을 잊었다고? 헐. (yikes = 헐, 으악)"],
+    ["This party is lit.", "이 파티 완전 신난다. (lit = 끝내주게 신나는)"],
+    ["I'm feeling kind of meh today.", "오늘 기분이 그냥 그래. (meh = 별로, 그저 그래)"],
+    ["He left me on read.", "걔가 내 메시지 읽씹했어. (left on read = 읽고 답 안 함)"],
+    ["That scene was iconic.", "그 장면은 전설이었어. (iconic = 전설적인)"],
+    ["That hotel is so bougie.", "그 호텔 완전 럭셔리하다. (bougie = 고급스러운, 있어 보이는)"],
+    ["You lost again? That's a skill issue.", "또 졌어? 그건 실력 문제지. (skill issue = 네 실력 탓)"],
+    ["Stop capping, that's not true.", "뻥치지 마, 그거 사실 아니잖아. (cap = 거짓말)"],
+    ["Walking away like that gave him so much aura.", "그렇게 쿨하게 떠나니까 포스 장난 아니었어. (aura = 멋, 포스)"],
+    ["Too much scrolling is giving me brain rot.", "스크롤만 너무 했더니 뇌가 녹는 것 같아. (brain rot = 저질 콘텐츠로 머리가 멍해짐)"],
+    ["I didn't study at all. I'm cooked.", "공부 하나도 안 했어. 나 망했어. (cooked = 망했다)"],
+    ["This song slaps.", "이 노래 완전 좋다. (slaps = 끝내준다)"],
+    ["Free coffee? That's a huge W.", "공짜 커피? 완전 이득이네. (W = win, 승리·이득)"],
+    ["Hot take: pineapple belongs on pizza.", "논란 발언 하나: 파인애플은 피자에 어울려. (hot take = 논란 될 만한 의견)"],
+  ],
+};
+
+// 롤플레이: 고른(말한) 문장에 따라 다음 장면이 갈라진다. opts = [영어, 한국어, 다음 노드]. 모든 상황은 start에서 시작
+const STORIES = {
+ trip: {title: "✈️ 뉴욕 여행 첫날", nodes: {
+  start: {scene: "🛂 공항 입국 심사", who: "심사관", en: "Good afternoon. May I see your passport, please?", ko: "안녕하세요. 여권 좀 보여 주시겠어요?",
+    opts: [["Sure, here you go.", "네, 여기 있어요.", "purpose"], ["Sorry, could you say that again?", "죄송한데, 다시 말씀해 주시겠어요?", "start2"]]},
+  start2: {who: "심사관", en: "No problem. I need to see your passport.", ko: "괜찮아요. 여권을 보여 주셔야 해요.",
+    opts: [["Oh, here it is.", "아, 여기 있어요.", "purpose"]]},
+  purpose: {who: "심사관", en: "What's the purpose of your visit?", ko: "방문 목적이 뭔가요?",
+    opts: [["I'm here on vacation.", "휴가로 왔어요.", "stay"], ["I'm here on business.", "출장으로 왔어요.", "business"]]},
+  business: {who: "심사관", en: "What kind of business?", ko: "어떤 일로요?",
+    opts: [["I'm attending a conference.", "콘퍼런스에 참석해요.", "stay"], ["I'm meeting a client.", "고객을 만나러 왔어요.", "stay"]]},
+  stay: {who: "심사관", en: "How long will you be staying?", ko: "얼마나 머무를 건가요?",
+    opts: [["About one week.", "일주일 정도요.", "where"], ["Just three days.", "딱 3일이요.", "where"]]},
+  where: {who: "심사관", en: "Where will you be staying?", ko: "어디서 지낼 건가요?",
+    opts: [["At a hotel in Manhattan.", "맨해튼에 있는 호텔이요.", "welcome"], ["I'm staying with a friend.", "친구 집에서 지내요.", "friend"]]},
+  friend: {who: "심사관", en: "Do you have your friend's address?", ko: "친구 주소 있으세요?",
+    opts: [["Yes, it's on my phone.", "네, 휴대폰에 있어요.", "welcome"], ["Sorry, I don't have it.", "죄송해요, 없어요.", "noaddr"]]},
+  noaddr: {who: "심사관", en: "Please call your friend and write it on this form.", ko: "친구에게 전화해서 이 서류에 적어 주세요.",
+    opts: [["Okay, I'll do that now.", "네, 지금 할게요.", "welcome"]]},
+  welcome: {who: "심사관", en: "Everything looks good. Welcome to New York!", ko: "다 됐습니다. 뉴욕에 오신 걸 환영해요!",
+    opts: [["Thank you very much!", "정말 감사합니다!", "taxi"]]},
+  taxi: {scene: "🚕 택시", who: "택시 기사", en: "Hi there! Where are you headed?", ko: "안녕하세요! 어디로 가세요?",
+    opts: [["To the Grand Hotel, please.", "그랜드 호텔로 가 주세요.", "traffic"], ["How much is it to Manhattan?", "맨해튼까지 얼마예요?", "price"]]},
+  price: {who: "택시 기사", en: "It's about seventy dollars, plus tip.", ko: "70달러 정도에 팁은 따로예요.",
+    opts: [["Okay, let's go.", "좋아요, 가죠.", "traffic"], ["That's too expensive. I'll take the train.", "너무 비싸요. 기차 탈게요.", "train"]]},
+  train: {who: "택시 기사", en: "No problem. The AirTrain is right over there.", ko: "괜찮아요. 에어트레인은 바로 저쪽이에요.",
+    opts: [["Thanks for your help!", "도와줘서 고마워요!", "hotel"]]},
+  traffic: {who: "택시 기사", en: "Traffic is heavy today. It might take an hour.", ko: "오늘 차가 많이 막혀요. 한 시간쯤 걸릴 수도 있어요.",
+    opts: [["That's fine. I'm not in a hurry.", "괜찮아요. 급하지 않아요.", "hotel"], ["Is there a faster way?", "더 빠른 길 있어요?", "toll"]]},
+  toll: {who: "택시 기사", en: "I can take the highway, but there's a toll.", ko: "고속도로로 갈 수 있는데, 통행료가 있어요.",
+    opts: [["Sure, let's do that.", "좋아요, 그렇게 해 주세요.", "hotel"], ["No, the normal way is fine.", "아뇨, 그냥 원래 길로 가 주세요.", "hotel"]]},
+  hotel: {scene: "🏨 호텔 체크인", who: "호텔 직원", en: "Welcome to the Grand Hotel. Do you have a reservation?", ko: "그랜드 호텔에 오신 걸 환영합니다. 예약하셨나요?",
+    opts: [["Yes, under the name Kim.", "네, 김이라는 이름으로요.", "lost"], ["No. Do you have any rooms available?", "아뇨. 빈방 있나요?", "walkin"]]},
+  lost: {who: "호텔 직원", en: "Hmm, I can't find your reservation. Do you have a confirmation number?", ko: "음, 예약이 안 보이네요. 예약 번호 있으세요?",
+    opts: [["Yes, let me check my email.", "네, 이메일 확인해 볼게요.", "found"], ["No, but I booked it last week.", "아뇨, 근데 지난주에 예약했어요.", "upgrade"]]},
+  found: {who: "호텔 직원", en: "Found it! Sorry for the wait.", ko: "찾았어요! 기다리게 해서 죄송해요.",
+    opts: [["No problem.", "괜찮아요.", "key"]]},
+  upgrade: {who: "호텔 직원", en: "I'm sorry for the trouble. We'll give you a room with a city view.", ko: "불편을 드려 죄송해요. 시티뷰 객실로 드릴게요.",
+    opts: [["Wow, thank you so much!", "와, 정말 감사해요!", "key"]]},
+  walkin: {who: "호텔 직원", en: "We have one room left, but it's a smoking room.", ko: "방이 하나 남았는데 흡연실이에요.",
+    opts: [["That's okay. I'll take it.", "괜찮아요. 그걸로 할게요.", "key"], ["Do you have a non-smoking room?", "금연실은 없나요?", "sorry"]]},
+  sorry: {who: "호텔 직원", en: "I'm afraid not. Shall I call another hotel for you?", ko: "죄송하지만 없어요. 다른 호텔에 전화해 드릴까요?",
+    opts: [["Yes, please. Thank you.", "네, 부탁해요. 고마워요.", "end2"], ["Never mind. I'll take the room.", "됐어요. 그 방으로 할게요.", "key"]]},
+  key: {who: "호텔 직원", en: "Here's your key. Your room is on the twelfth floor.", ko: "열쇠 여기 있어요. 방은 12층이에요.",
+    opts: [["What's the Wi-Fi password?", "와이파이 비밀번호가 뭐예요?", "wifi"], ["What time is breakfast?", "아침 식사는 몇 시예요?", "breakfast"], ["Thank you. Good night!", "감사해요. 안녕히 주무세요!", "end"]]},
+  wifi: {who: "호텔 직원", en: "It's on the card in your room. Enjoy your stay!", ko: "방에 있는 카드에 적혀 있어요. 즐거운 시간 보내세요!",
+    opts: [["Thanks a lot!", "정말 고마워요!", "end"]]},
+  breakfast: {who: "호텔 직원", en: "It's from seven to ten in the lobby restaurant.", ko: "7시부터 10시까지 로비 식당에서요.",
+    opts: [["Great. Thank you!", "좋네요. 감사해요!", "end"]]},
+  end: {who: "🎉 완료", en: "You made it to your room. Great job!", ko: "무사히 방에 도착했어요. 잘했어요!", end: true},
+  end2: {who: "🎉 완료", en: "The staff found you a room at another hotel nearby. Great job!", ko: "직원이 근처 다른 호텔 방을 찾아 줬어요. 잘했어요!", end: true},
+ }},
+ jury: {title: "🏆 광고제 심사 (심사위원끼리)", nodes: {
+  start: {scene: "🗳️ 심사 시작", who: "심사위원장", en: "Good morning, everyone. Let's start with the shortlist. What did you think of the first campaign?", ko: "좋은 아침입니다, 여러분. 숏리스트부터 시작하죠. 첫 번째 캠페인 어떠셨어요?",
+    opts: [["I loved it. The idea is simple but powerful.", "정말 좋았어요. 아이디어가 단순하지만 강력해요.", "love"], ["Honestly, I think the execution is weak.", "솔직히 실행이 약하다고 생각해요.", "weak"]]},
+  love: {who: "심사위원 Tom", en: "I agree the idea is strong, but has it been done before?", ko: "아이디어가 강하다는 데는 동의하는데, 전에 나온 적 있지 않나요?",
+    opts: [["I don't think so. It feels fresh to me.", "아닌 것 같아요. 저한텐 신선하게 느껴져요.", "results"], ["Good point. It reminds me of an older campaign.", "좋은 지적이에요. 예전 캠페인이 떠오르네요.", "similar"]]},
+  weak: {who: "심사위원 Tom", en: "Really? Which part didn't work for you?", ko: "정말요? 어떤 부분이 별로였어요?",
+    opts: [["The film is too long and the message gets lost.", "영상이 너무 길어서 메시지가 묻혀요.", "results"], ["The craft is not at the level of a Gold.", "완성도가 금상 수준은 아니에요.", "level"]]},
+  similar: {who: "심사위원장", en: "Let's check the reference before we decide. Can anyone find it?", ko: "결정하기 전에 레퍼런스부터 확인해 보죠. 찾을 수 있는 분?",
+    opts: [["I'll look it up right now.", "제가 지금 바로 찾아볼게요.", "results"], ["Let's move on and come back to it later.", "일단 넘어가고 나중에 다시 보죠.", "results"]]},
+  level: {who: "심사위원장", en: "So would you say it's more of a Silver or a Bronze?", ko: "그럼 은상이나 동상 쪽에 가깝다고 보시는 거죠?",
+    opts: [["I'd say Silver at most.", "많아야 은상이라고 봐요.", "results"], ["I think it deserves a Bronze.", "동상 정도가 맞다고 생각해요.", "results"]]},
+  results: {scene: "📊 성과 검토", who: "심사위원 Sara", en: "Let's look at the results. They claim sales went up by thirty percent.", ko: "성과를 보죠. 매출이 30% 올랐다고 주장하네요.",
+    opts: [["That's impressive, but is the data verified?", "인상적이지만 데이터가 검증된 건가요?", "verify"], ["The results clearly support the idea.", "성과가 아이디어를 확실히 뒷받침하네요.", "vote"]]},
+  verify: {who: "심사위원 Sara", en: "Good question. The case film doesn't show the source.", ko: "좋은 질문이에요. 케이스 필름에 출처가 안 나와요.",
+    opts: [["Then we should be careful about the results.", "그럼 성과는 조심해서 봐야겠네요.", "vote"], ["Let's ask the organizers to check it.", "주최 측에 확인을 요청하죠.", "vote"]]},
+  vote: {scene: "⚖️ 투표", who: "심사위원장", en: "Time to vote. Do we give this campaign a Gold?", ko: "투표할 시간이에요. 이 캠페인에 금상을 줄까요?",
+    opts: [["Yes, I vote for Gold.", "네, 금상에 투표할게요.", "gold"], ["No, I think Silver is more fair.", "아뇨, 은상이 더 공정하다고 봐요.", "silver"], ["I'd like to hear the others first.", "다른 분들 의견을 먼저 듣고 싶어요.", "others"]]},
+  others: {who: "심사위원 Tom", en: "Personally, I'm still on the fence. It's a tough call.", ko: "개인적으로는 아직 고민 중이에요. 어려운 결정이네요.",
+    opts: [["Then let's go with Silver for now.", "그럼 일단 은상으로 가죠.", "silver"], ["I think the idea is strong enough for Gold.", "아이디어는 금상 받을 만큼 강하다고 봐요.", "gold"]]},
+  gold: {who: "심사위원장", en: "The majority agrees. It's a Gold. Shall we talk about the Grand Prix candidates next?", ko: "과반이 동의했네요. 금상입니다. 다음은 그랑프리 후보 얘기해 볼까요?",
+    opts: [["Sure, let's do that.", "네, 그렇게 하죠.", "end"], ["Can we take a short break first?", "그 전에 잠깐 쉴 수 있을까요?", "end"]]},
+  silver: {who: "심사위원장", en: "Okay, Silver it is. Thank you for the honest discussion.", ko: "좋아요, 은상으로 하죠. 솔직하게 토론해 줘서 고마워요.",
+    opts: [["Thank you. It was a great discussion.", "감사합니다. 좋은 토론이었어요.", "end"]]},
+  end: {who: "🎉 완료", en: "The jury session is over. Great job!", ko: "심사 회의가 끝났어요. 잘했어요!", end: true},
+ }},
+ pitch: {title: "🎤 광고제 참여 (심사위원 앞 발표)", nodes: {
+  start: {scene: "🎤 발표 시작", who: "심사위원", en: "Welcome. You have five minutes to present your campaign. Please go ahead.", ko: "환영합니다. 캠페인 발표 시간은 5분입니다. 시작하세요.",
+    opts: [["Thank you. Let me start with the problem.", "감사합니다. 문제부터 말씀드릴게요.", "problem"], ["Thank you. First, let me show you the film.", "감사합니다. 먼저 영상을 보여 드릴게요.", "film"]]},
+  problem: {who: "심사위원", en: "Sure. What was the challenge for the brand?", ko: "네. 브랜드가 마주한 과제가 뭐였나요?",
+    opts: [["Young people were losing interest in the brand.", "젊은 층이 브랜드에 관심을 잃고 있었어요.", "idea"], ["The brand had a very small budget.", "브랜드 예산이 아주 적었어요.", "budget"]]},
+  film: {who: "심사위원", en: "The film was beautiful. But what problem were you solving?", ko: "영상 멋지네요. 그런데 어떤 문제를 해결하려던 건가요?",
+    opts: [["Young people were losing interest in the brand.", "젊은 층이 브랜드에 관심을 잃고 있었어요.", "idea"], ["We wanted to change how people see recycling.", "사람들이 재활용을 보는 시각을 바꾸고 싶었어요.", "idea"]]},
+  budget: {who: "심사위원", en: "Interesting. How did you get attention without much money?", ko: "흥미롭네요. 돈도 많지 않은데 어떻게 관심을 끌었나요?",
+    opts: [["We turned our customers into the media.", "고객을 매체로 만들었어요.", "idea"], ["We focused on one powerful social post.", "강력한 SNS 게시물 하나에 집중했어요.", "idea"]]},
+  idea: {scene: "💡 아이디어와 실행", who: "심사위원", en: "So what was the core idea?", ko: "그래서 핵심 아이디어가 뭐였죠?",
+    opts: [["We let people design their own packaging.", "사람들이 직접 포장을 디자인하게 했어요.", "exec"], ["We hid the product in a popular game.", "인기 게임 속에 제품을 숨겨 놨어요.", "exec"]]},
+  exec: {who: "심사위원", en: "I like that. How long did the campaign run?", ko: "좋네요. 캠페인은 얼마나 진행됐나요?",
+    opts: [["It ran for three months across five countries.", "5개국에서 3개월 동안 진행됐어요.", "results"], ["It was a one-day event in Seoul.", "서울에서 하루 진행한 이벤트였어요.", "results"]]},
+  results: {scene: "📈 성과 질문", who: "심사위원", en: "What were the results? Did it actually move the business?", ko: "성과는 어땠나요? 실제로 사업에 영향을 줬나요?",
+    opts: [["Sales went up by twenty percent in three months.", "3개월 만에 매출이 20% 올랐어요.", "proof"], ["We got over ten million views without paid media.", "유료 매체 없이 조회수 천만 회를 넘겼어요.", "views"]]},
+  proof: {who: "심사위원", en: "That's a strong number. How do you know it came from the campaign?", ko: "강력한 숫자네요. 그게 캠페인 덕분이라는 걸 어떻게 아세요?",
+    opts: [["We compared it with regions without the campaign.", "캠페인을 안 한 지역과 비교했어요.", "last"], ["Nothing else changed during that period.", "그 기간에 다른 변화는 없었어요.", "doubt"]]},
+  views: {who: "심사위원", en: "Views are nice, but did people buy the product?", ko: "조회수도 좋지만, 사람들이 제품을 샀나요?",
+    opts: [["Yes. Sales went up by twenty percent.", "네. 매출이 20% 올랐어요.", "last"], ["The main goal was brand awareness.", "주된 목표는 브랜드 인지도였어요.", "doubt"]]},
+  doubt: {who: "심사위원", en: "Hmm, that's not very convincing. Do you have any other data?", ko: "음, 설득력이 좀 약하네요. 다른 데이터 있나요?",
+    opts: [["Yes. Brand searches also doubled.", "네. 브랜드 검색량도 두 배가 됐어요.", "last"], ["Not yet, but we're tracking it now.", "아직은 없지만 지금 추적 중이에요.", "last"]]},
+  last: {scene: "🙏 마무리", who: "심사위원", en: "Thank you. Is there anything else you'd like to add?", ko: "감사합니다. 더 덧붙이고 싶은 말 있나요?",
+    opts: [["This campaign proved that a small idea can change behavior.", "이 캠페인은 작은 아이디어가 행동을 바꿀 수 있다는 걸 증명했어요.", "end"], ["No, that's all. Thank you for your time.", "아뇨, 이상입니다. 시간 내주셔서 감사합니다.", "end"]]},
+  end: {who: "🎉 완료", en: "The jury thanked you for a clear presentation. Great job!", ko: "심사위원들이 명확한 발표였다며 고마워했어요. 잘했어요!", end: true},
+ }},
+ kdrama: {title: "💜 K드라마 러버를 만남", nodes: {
+  start: {scene: "☕ 카페에서 우연히", who: "Emma", en: "Oh my gosh, are you Korean? I'm obsessed with K-dramas!", ko: "어머, 혹시 한국 분이세요? 저 K드라마 완전 좋아해요!",
+    opts: [["Yes, I am! Which dramas do you like?", "네, 맞아요! 어떤 드라마 좋아하세요?", "fav"], ["Really? That's so cool. When did you start watching?", "정말요? 멋지네요. 언제부터 보기 시작했어요?", "when"]]},
+  when: {who: "Emma", en: "During the pandemic. I watched Crash Landing on You and got hooked.", ko: "팬데믹 때요. 사랑의 불시착 보고 완전 빠져 버렸어요.",
+    opts: [["That's a classic. Everyone loves that one.", "그거 명작이죠. 다들 좋아해요.", "fav"], ["Oh, that's where a lot of fans started.", "아, 많은 팬들이 그걸로 시작했죠.", "fav"]]},
+  fav: {who: "Emma", en: "Right now I'm watching a romance drama. Do you watch K-dramas too?", ko: "지금은 로맨스 드라마 보고 있어요. 당신도 K드라마 봐요?",
+    opts: [["Of course! I love thrillers the most.", "당연하죠! 저는 스릴러를 제일 좋아해요.", "thriller"], ["Honestly, not that much. I'm more into movies.", "솔직히 많이는 안 봐요. 영화를 더 좋아해요.", "movies"]]},
+  thriller: {who: "Emma", en: "Ooh, I scare easily, but I'll try. Any recommendations?", ko: "오, 저 겁 많은데 도전해 볼게요. 추천해 줄 거 있어요?",
+    opts: [["You should watch Signal. It's a crime thriller with time travel.", "시그널 보세요. 시간을 넘나드는 범죄 스릴러예요.", "culture"], ["Start with something light, like a mystery romance.", "로맨스 섞인 가벼운 미스터리부터 시작해 보세요.", "culture"]]},
+  movies: {who: "Emma", en: "No way! Then have you seen Parasite?", ko: "말도 안 돼! 그럼 기생충은 봤어요?",
+    opts: [["Yes, I've seen it three times.", "네, 세 번이나 봤어요.", "culture"], ["Of course. Almost every Korean has seen it.", "물론이죠. 한국 사람은 거의 다 봤을걸요.", "culture"]]},
+  culture: {scene: "🗣️ 궁금한 한국 문화", who: "Emma", en: "Can I ask you something? In dramas, why do girls call older guys oppa?", ko: "뭐 하나 물어봐도 돼요? 드라마에서 여자들이 왜 나이 많은 남자를 '오빠'라고 불러요?",
+    opts: [["It means older brother, but it's also used for close older guys.", "원래 친오빠라는 뜻인데, 친한 연상 남자한테도 써요.", "age"], ["It's a way to show you're close to someone older.", "나이 많은 사람과 친하다는 걸 보여 주는 말이에요.", "age"]]},
+  age: {who: "Emma", en: "Interesting! Is that why people ask your age so quickly?", ko: "흥미롭네요! 그래서 사람들이 나이를 그렇게 빨리 물어보는 거예요?",
+    opts: [["Yes, age decides how we talk to each other.", "네, 나이에 따라 서로 말하는 방식이 달라져요.", "food"], ["Kind of. It's changing a lot these days, though.", "좀 그렇죠. 그래도 요즘은 많이 바뀌고 있어요.", "food"]]},
+  food: {who: "Emma", en: "I also want to try everything they eat in dramas. What should I eat first?", ko: "드라마에 나오는 음식도 다 먹어 보고 싶어요. 뭐부터 먹어야 해요?",
+    opts: [["Try fried chicken and beer. We call it chimaek.", "치킨이랑 맥주요. 치맥이라고 불러요.", "chimaek"], ["You have to try ramyeon at a convenience store.", "편의점 라면은 꼭 먹어 봐야 해요.", "ramyeon"]]},
+  chimaek: {who: "Emma", en: "Chimaek! I saw that in a drama! Is it really that good?", ko: "치맥! 드라마에서 봤어요! 정말 그렇게 맛있어요?",
+    opts: [["Trust me, it's the best on a summer night.", "믿어 보세요, 여름밤엔 최고예요.", "place"]]},
+  ramyeon: {who: "Emma", en: "Like by the Han River? That looks so fun!", ko: "한강에서 먹는 것처럼요? 그거 완전 재밌어 보여요!",
+    opts: [["Exactly. There are even ramyeon machines there.", "맞아요. 거기엔 라면 끓이는 기계도 있어요.", "place"]]},
+  place: {scene: "📍 촬영지 이야기", who: "Emma", en: "I really want to visit a filming location. Where should I go?", ko: "촬영지에 꼭 가 보고 싶어요. 어디로 가야 해요?",
+    opts: [["You should visit Bukchon Hanok Village.", "북촌 한옥마을에 가 보세요.", "hanok"], ["Namsan Tower is a must. It's in so many dramas.", "남산타워는 필수예요. 정말 많은 드라마에 나와요.", "namsan"]]},
+  hanok: {who: "Emma", en: "Can I wear a hanbok there?", ko: "거기서 한복 입어 봐도 돼요?",
+    opts: [["Yes, and you can enter the palaces for free in hanbok.", "네, 한복 입으면 고궁도 무료로 들어갈 수 있어요.", "phrase"]]},
+  namsan: {who: "Emma", en: "Is that where couples put locks on the fence?", ko: "커플들이 울타리에 자물쇠 거는 곳이 거기예요?",
+    opts: [["Yes! You should go at night. The view is amazing.", "네! 밤에 가 보세요. 경치가 끝내줘요.", "phrase"]]},
+  phrase: {scene: "👋 헤어질 때", who: "Emma", en: "Before I go, can you teach me one Korean word?", ko: "가기 전에 한국어 단어 하나 가르쳐 줄래요?",
+    opts: [["Sure. Daebak means awesome.", "그럼요. '대박'은 끝내준다는 뜻이에요.", "contact"], ["Try saying jinjja. It means really.", "'진짜'라고 해 보세요. 정말이라는 뜻이에요.", "contact"]]},
+  contact: {who: "Emma", en: "I love it! Do you want to swap Instagrams? We could watch a drama together sometime.", ko: "너무 좋아요! 인스타 교환할래요? 언제 같이 드라마 봐요.",
+    opts: [["Sure, here's my handle.", "좋아요, 이게 제 아이디예요.", "end"], ["I'd love that. Let's get chimaek too!", "좋아요. 치맥도 같이 해요!", "end"]]},
+  end: {who: "🎉 완료", en: "You made a new K-drama friend. Great job!", ko: "K드라마 친구가 새로 생겼어요. 잘했어요!", end: true},
+ }},
+ client: {title: "🤝 해외 광고주와 첫 미팅", nodes: {
+  start: {scene: "🤝 인사와 소개", who: "광고주 Sarah", en: "Hi, thanks for coming in. I'm Sarah, the marketing director.", ko: "안녕하세요, 와 주셔서 감사해요. 마케팅 디렉터 사라예요.",
+    opts: [["Nice to meet you, Sarah. Thanks for having us.", "만나서 반가워요, 사라. 불러 주셔서 감사해요.", "brief"], ["It's great to finally meet you in person.", "드디어 직접 뵙게 돼서 반갑습니다.", "brief"]]},
+  brief: {scene: "📋 브리프 받기", who: "광고주 Sarah", en: "So, we're launching a new energy drink next spring, and we need a campaign.", ko: "저희가 내년 봄에 새 에너지 음료를 출시해서 캠페인이 필요해요.",
+    opts: [["Who is the main target audience?", "주요 타깃은 누구인가요?", "target"], ["What's the main goal of the campaign?", "캠페인의 주된 목표가 뭔가요?", "goal"]]},
+  goal: {who: "광고주 Sarah", en: "We want to build awareness. Nobody knows the brand yet.", ko: "인지도를 쌓고 싶어요. 아직 아무도 브랜드를 몰라서요.",
+    opts: [["Then we should focus on reach first.", "그럼 먼저 도달률에 집중해야겠네요.", "target"], ["How will you measure success?", "성공은 어떻게 측정하실 건가요?", "kpi"]]},
+  kpi: {who: "광고주 Sarah", en: "Mainly brand awareness surveys and social media engagement.", ko: "주로 브랜드 인지도 조사와 SNS 반응이요.",
+    opts: [["That makes sense. And who is the target?", "그렇군요. 그럼 타깃은 누구인가요?", "target"]]},
+  target: {who: "광고주 Sarah", en: "Mostly people in their twenties who work out.", ko: "주로 운동하는 20대예요.",
+    opts: [["Got it. Which channels do they use the most?", "알겠습니다. 그들이 가장 많이 쓰는 채널은 뭔가요?", "channel"], ["Do you have any research on them?", "그들에 대한 조사 자료가 있나요?", "research"]]},
+  channel: {who: "광고주 Sarah", en: "Instagram and TikTok, definitely. Maybe some YouTube too.", ko: "인스타그램과 틱톡은 확실하고, 유튜브도 좀요.",
+    opts: [["Short videos would work well, then.", "그럼 짧은 영상이 잘 맞겠네요.", "budget"]]},
+  research: {who: "광고주 Sarah", en: "Yes, I'll send you the report after this meeting.", ko: "네, 이 미팅 끝나고 보고서 보내 드릴게요.",
+    opts: [["Great, that would be really helpful.", "좋아요, 정말 도움이 될 거예요.", "budget"]]},
+  budget: {scene: "💰 예산과 일정", who: "광고주 Sarah", en: "Our budget is around two hundred thousand dollars. Is that realistic?", ko: "예산은 20만 달러 정도예요. 현실적인가요?",
+    opts: [["It's doable if we focus on digital.", "디지털에 집중하면 가능해요.", "timeline"], ["It's a bit tight for a TV commercial.", "TV 광고를 하기엔 좀 빠듯해요.", "tight"]]},
+  tight: {who: "광고주 Sarah", en: "I see. What would you suggest instead?", ko: "그렇군요. 대신 뭘 제안하시겠어요?",
+    opts: [["We could work with fitness influencers.", "피트니스 인플루언서들과 협업할 수 있어요.", "timeline"], ["Let's start with one strong online film.", "강력한 온라인 영상 하나로 시작하죠.", "timeline"]]},
+  timeline: {who: "광고주 Sarah", en: "Sounds good. When can you show us the first ideas?", ko: "좋네요. 첫 아이디어는 언제 보여 주실 수 있어요?",
+    opts: [["We can present three ideas in two weeks.", "2주 후에 아이디어 세 개를 발표할 수 있어요.", "close"], ["Could we have three weeks? We want to do some research first.", "3주를 주실 수 있을까요? 먼저 조사를 좀 하고 싶어요.", "extend"]]},
+  extend: {who: "광고주 Sarah", en: "Hmm, three weeks is fine, but not longer than that.", ko: "음, 3주는 괜찮은데 그 이상은 안 돼요.",
+    opts: [["Understood. We'll stick to the deadline.", "알겠습니다. 마감일 꼭 지킬게요.", "close"]]},
+  close: {scene: "👋 마무리", who: "광고주 Sarah", en: "Great. Any other questions before we wrap up?", ko: "좋아요. 마치기 전에 다른 질문 있으세요?",
+    opts: [["Who will make the final decision?", "최종 결정은 누가 하시나요?", "decision"], ["No, I think we're all set. Thank you.", "아뇨, 다 된 것 같아요. 감사합니다.", "end"]]},
+  decision: {who: "광고주 Sarah", en: "Our CEO will. She'll join the next presentation.", ko: "저희 CEO가 해요. 다음 발표에 참석할 거예요.",
+    opts: [["Perfect. We'll prepare for that. Thank you.", "좋습니다. 그에 맞춰 준비할게요. 감사합니다.", "end"]]},
+  end: {who: "🎉 완료", en: "The meeting went well, and you got a clear brief. Great job!", ko: "미팅이 잘 끝났고 브리프도 확실하게 받았어요. 잘했어요!", end: true},
+ }},
+ network: {title: "🥂 광고제 네트워킹 파티", nodes: {
+  start: {scene: "🥂 처음 말 걸기", who: "Daniel", en: "Hi! Great party, isn't it? I don't think we've met. I'm Daniel.", ko: "안녕하세요! 파티 좋죠? 처음 뵙는 것 같네요. 저는 다니엘이에요.",
+    opts: [["Hi Daniel, I'm Kim. Nice to meet you.", "안녕하세요 다니엘, 저는 김이에요. 반가워요.", "work"], ["It is! The music is great. Nice to meet you.", "그러네요! 음악 좋네요. 반가워요.", "work"]]},
+  work: {who: "Daniel", en: "So, what do you do?", ko: "그래서, 무슨 일 하세요?",
+    opts: [["I'm a creative director at an agency in Seoul.", "서울에 있는 대행사에서 크리에이티브 디렉터로 일해요.", "seoul"], ["I work in advertising. I mostly make video campaigns.", "광고 일을 해요. 주로 영상 캠페인을 만들어요.", "video"]]},
+  seoul: {who: "Daniel", en: "Seoul! Korean ads are getting so much attention lately.", ko: "서울이요! 요즘 한국 광고가 정말 주목받고 있잖아요.",
+    opts: [["Thanks! What about you? What do you do?", "고마워요! 당신은요? 무슨 일 하세요?", "daniel"]]},
+  video: {who: "Daniel", en: "Nice. Did you enter anything this year?", ko: "좋네요. 올해 출품한 작품 있어요?",
+    opts: [["Yes, we made the shortlist in Film.", "네, 필름 부문 숏리스트에 올랐어요.", "shortlist"], ["Not this year. I'm here to get inspired.", "올해는 안 했어요. 영감 얻으러 왔어요.", "daniel"]]},
+  shortlist: {who: "Daniel", en: "Congratulations! Fingers crossed for tomorrow.", ko: "축하해요! 내일 잘되길 빌게요.",
+    opts: [["Thank you! What brings you here?", "고마워요! 당신은 어쩐 일로 왔어요?", "daniel"]]},
+  daniel: {scene: "💬 스몰토크", who: "Daniel", en: "I'm a strategist at a London agency. Is this your first time at the festival?", ko: "저는 런던 대행사의 전략가예요. 이번 광고제는 처음이세요?",
+    opts: [["Yes, it's my first time. It's a bit overwhelming.", "네, 처음이에요. 좀 정신이 없네요.", "first"], ["No, I come every year. It never gets old.", "아뇨, 매년 와요. 질리지가 않아요.", "every"]]},
+  first: {who: "Daniel", en: "Don't worry, everyone feels that way. Have you seen any good talks?", ko: "걱정 마세요, 다들 그래요. 좋은 강연 봤어요?",
+    opts: [["Yes, the one about AI and creativity was great.", "네, AI와 크리에이티브에 대한 강연이 좋았어요.", "talk"], ["Not yet. Any recommendations?", "아직이요. 추천해 줄 만한 거 있어요?", "talk"]]},
+  every: {who: "Daniel", en: "Then you must know all the best spots! Any favorite talks so far?", ko: "그럼 좋은 데 다 아시겠네요! 지금까지 좋았던 강연 있어요?",
+    opts: [["The one about AI and creativity was great.", "AI와 크리에이티브에 대한 강연이 좋았어요.", "talk"]]},
+  talk: {who: "Daniel", en: "Totally. Everyone is talking about AI this year.", ko: "맞아요. 올해는 다들 AI 얘기뿐이에요.",
+    opts: [["I think ideas still matter more than tools.", "그래도 도구보다 아이디어가 더 중요하다고 생각해요.", "card"], ["It's exciting, but a little scary too.", "흥미롭지만 좀 무섭기도 해요.", "card"]]},
+  card: {scene: "📇 명함 교환", who: "Daniel", en: "I agree. Hey, do you have a card? I'd love to stay in touch.", ko: "동감이에요. 혹시 명함 있어요? 계속 연락하고 지내고 싶어요.",
+    opts: [["Sure, here's my card.", "그럼요, 여기 제 명함이요.", "coffee"], ["I ran out, but can I add you on LinkedIn?", "다 떨어졌는데, 링크드인 추가해도 될까요?", "coffee"]]},
+  coffee: {who: "Daniel", en: "Of course. Let's grab a coffee tomorrow if you're free.", ko: "물론이죠. 시간 되면 내일 커피 한잔해요.",
+    opts: [["I'd love that. I'm going to grab a drink. See you around!", "좋아요. 저 음료 좀 가져올게요. 또 봐요!", "end"], ["Sounds great. It was really nice talking to you.", "좋아요. 얘기 나눠서 정말 즐거웠어요.", "end"]]},
+  end: {who: "🎉 완료", en: "You made a new connection at the festival. Great job!", ko: "광고제에서 새로운 인맥이 생겼어요. 잘했어요!", end: true},
+ }},
+ sick: {title: "💊 여행 중 아플 때 (약국·병원)", nodes: {
+  start: {scene: "💊 약국에서", who: "약사", en: "Hi, how can I help you today?", ko: "안녕하세요, 무엇을 도와드릴까요?",
+    opts: [["I have a terrible headache.", "머리가 너무 아파요.", "headache"], ["I think I have a fever and a sore throat.", "열이 나고 목이 아픈 것 같아요.", "fever"]]},
+  headache: {who: "약사", en: "How long have you had it?", ko: "언제부터 그랬어요?",
+    opts: [["Since this morning.", "오늘 아침부터요.", "allergy"], ["For about three days.", "3일 정도 됐어요.", "long"]]},
+  long: {who: "약사", en: "Three days is quite long. Do you feel dizzy too?", ko: "3일이면 꽤 오래됐네요. 어지럽기도 해요?",
+    opts: [["Yes, a little.", "네, 조금요.", "doctor"], ["No, just the headache.", "아뇨, 두통만 있어요.", "allergy"]]},
+  fever: {who: "약사", en: "Have you checked your temperature?", ko: "체온 재 보셨어요?",
+    opts: [["Yes, it was thirty-eight degrees.", "네, 38도였어요.", "doctor"], ["No, I don't have a thermometer.", "아뇨, 체온계가 없어요.", "thermo"]]},
+  thermo: {who: "약사", en: "Let me check it for you. Hmm, it's a little high.", ko: "제가 재 드릴게요. 음, 좀 높네요.",
+    opts: [["Is it serious?", "심각한가요?", "doctor"]]},
+  doctor: {who: "약사", en: "I think you should see a doctor. There's a clinic next door.", ko: "의사에게 진료받는 게 좋겠어요. 옆 건물에 병원이 있어요.",
+    opts: [["Do they speak English there?", "거기 영어 하나요?", "clinic"], ["Can I just take some medicine for now?", "일단 약만 먹어도 될까요?", "allergy"]]},
+  clinic: {scene: "🏥 병원에서", who: "의사", en: "Hello, I'm Dr. Lee. What seems to be the problem?", ko: "안녕하세요, 이 의사입니다. 어디가 불편하세요?",
+    opts: [["I've had a fever and a headache since yesterday.", "어제부터 열이 나고 머리가 아파요.", "exam"]]},
+  exam: {who: "의사", en: "Let me take a look. It looks like a cold. You need some rest.", ko: "한번 볼게요. 감기 같네요. 좀 쉬셔야 해요.",
+    opts: [["Can I still fly home in two days?", "이틀 뒤에 비행기 타고 집에 가도 될까요?", "fly"], ["Will you give me a prescription?", "처방전 주시나요?", "rx"]]},
+  fly: {who: "의사", en: "You should be fine if you rest. Here's a prescription.", ko: "쉬면 괜찮을 거예요. 처방전 여기 있어요.",
+    opts: [["Thank you so much, doctor.", "정말 감사합니다, 선생님.", "pay"]]},
+  rx: {who: "의사", en: "Yes, here it is. Take it to the pharmacy.", ko: "네, 여기요. 약국에 가져가세요.",
+    opts: [["Thank you. Where do I pay?", "감사합니다. 계산은 어디서 하나요?", "pay"]]},
+  pay: {who: "접수 직원", en: "That's eighty dollars. Do you have travel insurance?", ko: "80달러입니다. 여행자 보험 있으세요?",
+    opts: [["Yes. Can I get a receipt for my insurance?", "네. 보험 청구용 영수증 받을 수 있을까요?", "end"], ["No, I'll just pay by card.", "아뇨, 그냥 카드로 낼게요.", "end"]]},
+  allergy: {who: "약사", en: "Okay. Are you allergic to any medicine?", ko: "알겠어요. 알레르기 있는 약이 있나요?",
+    opts: [["Yes, I'm allergic to penicillin.", "네, 페니실린 알레르기가 있어요.", "dose"], ["No, I'm not allergic to anything.", "아뇨, 알레르기 없어요.", "dose"]]},
+  dose: {who: "약사", en: "Take two of these every six hours, after meals.", ko: "6시간마다 두 알씩, 식후에 드세요.",
+    opts: [["Can I take them on an empty stomach?", "빈속에 먹어도 되나요?", "stomach"], ["Got it. Thank you so much.", "알겠어요. 정말 감사합니다.", "end"]]},
+  stomach: {who: "약사", en: "It's better not to. Eat something light first.", ko: "안 그러는 게 좋아요. 가벼운 거라도 먼저 드세요.",
+    opts: [["Okay, I will. Thanks for your help.", "네, 그럴게요. 도와주셔서 감사해요.", "end"]]},
+  end: {who: "🎉 완료", en: "You got the help you needed. Get well soon!", ko: "필요한 도움을 받았어요. 얼른 나으세요!", end: true},
+ }},
+ airbnb: {title: "🏠 에어비앤비 호스트와 문제 해결", nodes: {
+  start: {scene: "🔑 체크인이 안 돼요", who: "호스트 Mike (전화)", en: "Hello, this is Mike. Is everything okay with the apartment?", ko: "여보세요, 마이크예요. 숙소에 문제없나요?",
+    opts: [["Hi Mike, I can't open the door. The code isn't working.", "안녕하세요 마이크, 문이 안 열려요. 비밀번호가 안 돼요.", "code"], ["Hi, I can't find the key box.", "안녕하세요, 열쇠 보관함을 못 찾겠어요.", "keybox"]]},
+  code: {who: "호스트 Mike (전화)", en: "Oh no. Did you press the star button after the code?", ko: "이런. 비밀번호 누르고 별표 버튼 눌렀어요?",
+    opts: [["Oh, I didn't. Let me try again.", "아, 안 눌렀어요. 다시 해 볼게요.", "inside"], ["Yes, I did, but it still doesn't work.", "네, 눌렀는데 그래도 안 돼요.", "newcode"]]},
+  newcode: {who: "호스트 Mike (전화)", en: "Sorry about that. I just reset it. Try one, two, three, four.", ko: "죄송해요. 방금 초기화했어요. 1234로 해 보세요.",
+    opts: [["It worked! Thank you.", "됐어요! 고마워요.", "inside"]]},
+  keybox: {who: "호스트 Mike (전화)", en: "It's behind the plant pot, next to the door.", ko: "문 옆 화분 뒤에 있어요.",
+    opts: [["Found it! Thanks.", "찾았어요! 고마워요.", "inside"]]},
+  inside: {scene: "🚿 숙소 안 문제", who: "호스트 Mike (전화)", en: "Great. Welcome! How does everything look?", ko: "좋아요. 환영해요! 다 괜찮아 보이나요?",
+    opts: [["It's nice, but there's no hot water.", "좋은데 온수가 안 나와요.", "water"], ["The Wi-Fi isn't working.", "와이파이가 안 돼요.", "wifi"]]},
+  water: {who: "호스트 Mike (전화)", en: "The boiler switch is in the kitchen. Can you check if it's on?", ko: "보일러 스위치가 부엌에 있어요. 켜져 있는지 확인해 줄래요?",
+    opts: [["It's on, but the water is still cold.", "켜져 있는데 물이 여전히 차가워요.", "repair"], ["Oh, it was off. It's working now.", "아, 꺼져 있었네요. 이제 돼요.", "extra"]]},
+  wifi: {who: "호스트 Mike (전화)", en: "Try restarting the router. It's under the TV.", ko: "공유기를 다시 켜 보세요. TV 밑에 있어요.",
+    opts: [["I tried that, but it still doesn't work.", "해 봤는데 그래도 안 돼요.", "repair"], ["That fixed it. Thanks!", "그걸로 해결됐어요. 고마워요!", "extra"]]},
+  repair: {scene: "🛠️ 해결 요청", who: "호스트 Mike (전화)", en: "I'm so sorry. I can send a repair person tomorrow morning.", ko: "정말 죄송해요. 내일 아침에 수리 기사를 보낼 수 있어요.",
+    opts: [["Is there any way to fix it tonight?", "오늘 밤에 고칠 방법은 없을까요?", "tonight"], ["Okay, but could I get a partial refund?", "알겠어요. 그런데 일부 환불받을 수 있을까요?", "refund"]]},
+  tonight: {who: "호스트 Mike (전화)", en: "Let me call someone. I'll get back to you in ten minutes.", ko: "누군가에게 전화해 볼게요. 10분 안에 다시 연락드릴게요.",
+    opts: [["Thank you, I really appreciate it.", "고마워요, 정말 감사해요.", "fixed"]]},
+  fixed: {who: "호스트 Mike (전화)", en: "Good news, a repair person is on the way. Sorry again for the trouble.", ko: "좋은 소식이에요, 수리 기사가 가는 중이에요. 다시 한번 불편 드려 죄송해요.",
+    opts: [["No worries. Thanks for the quick help.", "괜찮아요. 빨리 도와줘서 고마워요.", "end"]]},
+  refund: {who: "호스트 Mike (전화)", en: "That's fair. I'll refund one night through the app.", ko: "그게 맞죠. 앱으로 1박 요금을 환불해 드릴게요.",
+    opts: [["Thank you. That's very kind of you.", "고마워요. 정말 친절하시네요.", "end"]]},
+  extra: {who: "호스트 Mike (전화)", en: "Perfect. Is there anything else you need?", ko: "좋아요. 더 필요한 거 있어요?",
+    opts: [["Could you leave some extra towels?", "수건 좀 더 갖다 주실 수 있나요?", "towels"], ["No, that's all. Thanks, Mike!", "아뇨, 그게 다예요. 고마워요, 마이크!", "end"]]},
+  towels: {who: "호스트 Mike (전화)", en: "Sure, there are extra towels in the closet.", ko: "그럼요, 옷장에 여분 수건이 있어요.",
+    opts: [["Great. Have a good night!", "좋아요. 좋은 밤 보내세요!", "end"]]},
+  end: {who: "🎉 완료", en: "The problem is solved. Enjoy your stay. Great job!", ko: "문제가 해결됐어요. 즐거운 숙박 되세요. 잘했어요!", end: true},
+ }},
+ interview: {title: "💼 영어 면접", nodes: {
+  start: {scene: "👋 면접 시작", who: "면접관", en: "Thanks for coming in today. Could you tell me a little about yourself?", ko: "오늘 와 주셔서 감사합니다. 자기소개 좀 해 주시겠어요?",
+    opts: [["Sure. I've worked in advertising for eight years.", "네. 저는 광고 업계에서 8년간 일했습니다.", "project"], ["Of course. I'm a creative person who loves solving problems.", "물론이죠. 저는 문제 해결을 좋아하는 크리에이티브한 사람입니다.", "project"]]},
+  project: {who: "면접관", en: "Interesting. What was your biggest project?", ko: "흥미롭네요. 가장 큰 프로젝트는 뭐였나요?",
+    opts: [["I led a global campaign for a tech brand.", "테크 브랜드의 글로벌 캠페인을 이끌었습니다.", "result"], ["I launched a new beverage brand in Korea.", "한국에서 새로운 음료 브랜드를 런칭했습니다.", "result"]]},
+  result: {who: "면접관", en: "What was the result?", ko: "결과는 어땠나요?",
+    opts: [["It won a Silver at an international festival.", "국제 광고제에서 은상을 받았습니다.", "why"], ["Sales grew by thirty percent in six months.", "6개월 만에 매출이 30% 늘었습니다.", "why"]]},
+  why: {scene: "🎯 지원 동기", who: "면접관", en: "Why do you want to join our company?", ko: "왜 저희 회사에 오고 싶으신가요?",
+    opts: [["I admire your creative work and want to grow with your team.", "귀사의 크리에이티브 작업을 존경하고, 팀과 함께 성장하고 싶습니다.", "strength"], ["I want to work on more global projects.", "더 많은 글로벌 프로젝트를 하고 싶습니다.", "strength"]]},
+  strength: {scene: "💪 강점과 약점", who: "면접관", en: "What would you say is your greatest strength?", ko: "가장 큰 강점이 뭐라고 생각하세요?",
+    opts: [["I'm good at turning complex ideas into simple stories.", "복잡한 아이디어를 쉬운 이야기로 바꾸는 걸 잘합니다.", "weak"], ["I work well under pressure.", "압박 속에서도 일을 잘 해냅니다.", "pressure"]]},
+  pressure: {who: "면접관", en: "Can you give me an example?", ko: "예를 들어 주실 수 있나요?",
+    opts: [["Once, we had to remake a whole campaign in three days.", "한번은 캠페인 전체를 3일 만에 다시 만들어야 했습니다.", "weak"]]},
+  weak: {who: "면접관", en: "And what about your weaknesses?", ko: "그럼 약점은요?",
+    opts: [["I sometimes take on too much, so I'm learning to delegate.", "가끔 일을 너무 많이 떠안아서, 위임하는 법을 배우고 있습니다.", "conflict"], ["My English isn't perfect yet, but I practice every day.", "영어가 아직 완벽하지 않지만, 매일 연습하고 있습니다.", "english"]]},
+  english: {who: "면접관", en: "Well, you're doing great so far!", ko: "지금까지 아주 잘하고 계세요!",
+    opts: [["Thank you, that means a lot.", "감사합니다, 큰 힘이 되네요.", "conflict"]]},
+  conflict: {who: "면접관", en: "How do you handle disagreements with clients?", ko: "클라이언트와 의견이 다를 때 어떻게 대처하세요?",
+    opts: [["I listen first, then show data to support my idea.", "먼저 듣고, 그다음 제 아이디어를 뒷받침할 데이터를 보여 줍니다.", "questions"], ["I try to find a solution that works for both sides.", "양쪽 모두에게 맞는 해결책을 찾으려고 합니다.", "questions"]]},
+  questions: {scene: "🙋 마무리 질문", who: "면접관", en: "Great. Do you have any questions for us?", ko: "좋습니다. 저희에게 질문 있으신가요?",
+    opts: [["What does success look like in this role in the first year?", "이 자리에서 첫해의 성공은 어떤 모습인가요?", "answer"], ["What are the next steps in the process?", "다음 절차는 어떻게 되나요?", "next"]]},
+  answer: {who: "면접관", en: "Good question. We'd expect you to lead at least two major pitches.", ko: "좋은 질문이네요. 최소 두 건의 큰 경쟁 PT를 이끌어 주길 기대합니다.",
+    opts: [["That sounds exciting. And what are the next steps?", "기대되네요. 그럼 다음 절차는 어떻게 되나요?", "next"]]},
+  next: {who: "면접관", en: "We'll get back to you within a week.", ko: "일주일 안에 연락드리겠습니다.",
+    opts: [["Thank you for your time. I look forward to hearing from you.", "시간 내주셔서 감사합니다. 연락 기다리겠습니다.", "end"]]},
+  end: {who: "🎉 완료", en: "The interview went really well. Great job!", ko: "면접이 아주 잘 끝났어요. 잘했어요!", end: true},
+ }},
+ mystery: {title: "🕵️ 추리극: 사라진 우승 트로피", nodes: {
+  start: {scene: "🏆 사건 발생", who: "행사 책임자 Laura", en: "Detective, thank goodness you're here! The Grand Prix trophy is gone, and the ceremony starts in one hour.", ko: "탐정님, 와 주셔서 다행이에요! 그랑프리 트로피가 사라졌어요. 시상식이 한 시간 뒤예요.",
+    opts: [["Calm down. When did you last see it?", "진정하세요. 마지막으로 본 게 언제예요?", "last"], ["Who was near the trophy tonight?", "오늘 밤 트로피 근처에 누가 있었죠?", "suspects"]]},
+  last: {who: "행사 책임자 Laura", en: "At eight o'clock, in the backstage room. Chloe from our staff locked the door.", ko: "8시에 무대 뒤 방에서요. 저희 스태프 클로이가 문을 잠갔어요.",
+    opts: [["Who else was near that room tonight?", "오늘 밤 그 방 근처에 또 누가 있었죠?", "suspects"]]},
+  suspects: {who: "행사 책임자 Laura", en: "Three people: Chloe from our staff, Ryan, a creative director, and Victor from the jury.", ko: "세 명이요. 스태프 클로이, 크리에이티브 디렉터 라이언, 그리고 심사위원 빅터요.",
+    opts: [["Let's start with Ryan.", "라이언부터 시작하죠.", "ryan"], ["Bring them in one by one.", "한 명씩 데려와 주세요.", "ryan"]]},
+  ryan: {scene: "🔍 용의자 1: 라이언", who: "Ryan", en: "Look, I know how this looks. My agency lost the Grand Prix last year.", ko: "이게 어떻게 보이는지 알아요. 우리 회사가 작년에 그랑프리를 놓쳤거든요.",
+    opts: [["Where were you at eight thirty?", "8시 30분에 어디 있었어요?", "ryanAlibi"], ["Are you still angry about last year?", "작년 일로 아직 화나 있어요?", "ryanAngry"]]},
+  ryanAngry: {who: "Ryan", en: "Angry? Sure. But I'd never steal. I was rehearsing on stage all evening.", ko: "화나냐고요? 그렇죠. 하지만 절대 훔치진 않아요. 저녁 내내 무대에서 리허설했어요.",
+    opts: [["Can anyone confirm that?", "그걸 확인해 줄 사람 있어요?", "ryanAlibi"], ["Fine. Don't leave the building.", "알겠어요. 건물 밖으로 나가지 마세요.", "victor"]]},
+  ryanAlibi: {who: "Ryan", en: "I was on stage rehearsing my speech. Ask the sound team. They filmed it.", ko: "무대에서 연설 리허설 중이었어요. 음향팀에 물어보세요. 영상도 찍었어요.",
+    opts: [["I'll check the video. You can go for now.", "영상 확인해 볼게요. 일단 가셔도 돼요.", "victor"]]},
+  victor: {scene: "🔍 용의자 2: 빅터", who: "Victor", en: "Detective, I'm a jury member. I have nothing to do with this.", ko: "탐정님, 저는 심사위원이에요. 이 일과는 아무 상관 없어요.",
+    opts: [["Then why were you near the backstage room?", "그럼 왜 무대 뒤 방 근처에 있었죠?", "victorWhy"], ["Did you see anything unusual tonight?", "오늘 밤 이상한 거 못 봤어요?", "victorSaw"]]},
+  victorWhy: {who: "Victor", en: "I was looking for the restroom. I got lost, that's all.", ko: "화장실을 찾고 있었어요. 길을 잃었을 뿐이에요.",
+    opts: [["Did you see anyone else there?", "거기서 다른 사람 봤어요?", "victorSaw"]]},
+  victorSaw: {who: "Victor", en: "Actually, yes. I saw Chloe go into that room around eight forty. She looked nervous.", ko: "사실 봤어요. 8시 40분쯤 클로이가 그 방에 들어가는 걸 봤어요. 긴장한 것 같았어요.",
+    opts: [["Thank you. That's very helpful.", "고마워요. 큰 도움이 됐어요.", "chloe"]]},
+  chloe: {scene: "🔍 용의자 3: 클로이", who: "Chloe", en: "I locked the room at eight, and I never went back. I promise.", ko: "8시에 방을 잠갔고, 다시는 안 갔어요. 맹세해요.",
+    opts: [["Someone saw you go in at eight forty.", "누가 8시 40분에 당신이 들어가는 걸 봤어요.", "chloeLie"], ["Why do you have glue on your hands?", "손에 왜 접착제가 묻어 있죠?", "chloeGlue"]]},
+  chloeLie: {who: "Chloe", en: "That's... I just went back to check something.", ko: "그건… 그냥 뭐 좀 확인하러 다시 갔던 거예요.",
+    opts: [["And why do you have glue on your hands?", "그리고 손에 접착제는 왜 묻어 있죠?", "chloeGlue"], ["Okay. I have everything I need.", "좋아요. 필요한 건 다 들었어요.", "accuse"]]},
+  chloeGlue: {who: "Chloe", en: "Glue? I was, um... fixing a sign.", ko: "접착제요? 저, 음… 표지판을 고치고 있었어요.",
+    opts: [["I think I know what happened.", "무슨 일이 있었는지 알 것 같네요.", "accuse"]]},
+  accuse: {scene: "⚖️ 범인 지목", who: "행사 책임자 Laura", en: "Detective, everyone is waiting. Who took the trophy?", ko: "탐정님, 다들 기다리고 있어요. 누가 트로피를 가져갔죠?",
+    opts: [["It was Ryan. He wanted revenge.", "라이언이에요. 복수하고 싶었던 거죠.", "badRyan"], ["It was Victor. He lied about the restroom.", "빅터예요. 화장실 얘기는 거짓말이었어요.", "badVictor"], ["It was Chloe. She broke it and tried to fix it.", "클로이예요. 트로피를 깨뜨리고 고치려 했던 거예요.", "confess"]]},
+  confess: {who: "Chloe", en: "You're right. I dropped it and it broke. I was so scared, so I tried to glue it back together.", ko: "맞아요. 떨어뜨려서 깨졌어요. 너무 무서워서 접착제로 붙이려고 했어요.",
+    opts: [["It's okay. Accidents happen. Let's tell Laura together.", "괜찮아요. 사고는 일어나기 마련이죠. 같이 로라에게 말해요.", "end"], ["Where is the trophy now?", "지금 트로피는 어디 있죠?", "end"]]},
+  end: {who: "🎉 해피 엔딩", en: "The trophy was found in a storage box, glued together. The ceremony started on time. Case closed!", ko: "트로피는 접착제로 붙인 채 보관함에서 발견됐고, 시상식은 제시간에 시작했어요. 사건 해결!", end: true},
+  badRyan: {who: "💀 배드 엔딩", en: "The rehearsal video proves Ryan was on stage. The real culprit got away.", ko: "리허설 영상이 라이언이 무대에 있었다는 걸 증명했어요. 진짜 범인은 빠져나갔어요.", end: true},
+  badVictor: {who: "💀 배드 엔딩", en: "Victor really was lost on his way to the restroom. The trophy is still missing.", ko: "빅터는 정말 화장실 가다 길을 잃었던 거예요. 트로피는 여전히 행방불명이에요.", end: true},
+ }},
+ alien: {title: "👽 외계인에게 지구 설명하기", nodes: {
+  start: {scene: "🛸 착륙", who: "외계인 Zorp", en: "Greetings, human. I am Zorp. I have come to learn about Earth. Will you help me?", ko: "안녕하신가, 인간. 나는 조프다. 지구에 대해 배우러 왔다. 도와주겠나?",
+    opts: [["Sure! What do you want to know?", "그럼요! 뭐가 알고 싶어요?", "coffee"], ["Wow, okay. Welcome to Earth!", "와, 알겠어요. 지구에 온 걸 환영해요!", "coffee"]]},
+  coffee: {who: "외계인 Zorp", en: "Why do humans drink hot brown water every morning?", ko: "인간들은 왜 매일 아침 뜨거운 갈색 물을 마시는가?",
+    opts: [["That's coffee. It helps us wake up.", "그건 커피예요. 잠을 깨게 도와줘요.", "noCoffee"], ["It's a drink that gives us energy. Many people love the taste.", "에너지를 주는 음료예요. 맛을 좋아하는 사람도 많아요.", "noCoffee"]]},
+  noCoffee: {who: "외계인 Zorp", en: "Interesting. What happens if a human does not drink it?", ko: "흥미롭군. 인간이 그걸 안 마시면 어떻게 되는가?",
+    opts: [["They get sleepy and a little grumpy.", "졸리고 좀 짜증이 나요.", "phone"], ["Nothing serious. Some people get headaches.", "별일 없어요. 머리가 아픈 사람도 있어요.", "phone"]]},
+  phone: {scene: "📱 이상한 지구 물건", who: "외계인 Zorp", en: "Why does every human stare at a small glowing rectangle?", ko: "왜 모든 인간이 작은 빛나는 네모를 쳐다보는가?",
+    opts: [["It's a smartphone. We use it to talk and find information.", "스마트폰이에요. 대화하고 정보를 찾는 데 써요.", "food"], ["It's like a tiny computer we carry everywhere.", "어디든 들고 다니는 작은 컴퓨터 같은 거예요.", "food"]]},
+  food: {who: "외계인 Zorp", en: "I saw humans take pictures of their food before eating. Is this a ritual?", ko: "인간들이 먹기 전에 음식 사진을 찍는 걸 봤다. 이것은 의식인가?",
+    opts: [["Kind of! We share them online with our friends.", "비슷해요! 온라인으로 친구들과 공유해요.", "monday"], ["Ha ha, no. We just like to remember good meals.", "하하, 아니요. 그냥 맛있는 식사를 기억하고 싶은 거예요.", "monday"]]},
+  monday: {scene: "📅 지구인의 감정", who: "외계인 Zorp", en: "Why do humans hate a day called Monday?", ko: "인간들은 왜 월요일이라는 날을 싫어하는가?",
+    opts: [["Because the weekend is over and we go back to work.", "주말이 끝나고 다시 일하러 가야 하니까요.", "work"], ["It's not the day itself. We just miss our free time.", "그날 자체가 싫은 게 아니라, 자유 시간이 그리운 거예요.", "work"]]},
+  work: {who: "외계인 Zorp", en: "Then why do humans work at all?", ko: "그렇다면 인간은 왜 일을 하는가?",
+    opts: [["To earn money for food and a home.", "먹을 것과 집을 위해 돈을 벌려고요.", "money"], ["Some people work because they love what they do.", "하는 일을 사랑해서 일하는 사람도 있어요.", "love"]]},
+  money: {who: "외계인 Zorp", en: "Money? Is it delicious?", ko: "돈? 그것은 맛있는가?",
+    opts: [["No, ha ha! It's paper and numbers we trade for things.", "아뇨, 하하! 물건과 바꾸는 종이와 숫자예요.", "bye"]]},
+  love: {who: "외계인 Zorp", en: "Love? I have heard this word many times. What is it?", ko: "사랑? 이 단어를 여러 번 들었다. 그것이 무엇인가?",
+    opts: [["It's a strong feeling of caring about someone.", "누군가를 아끼는 강한 감정이에요.", "bye"], ["That's a hard question. Even humans don't fully understand it.", "어려운 질문이네요. 인간도 완전히 이해하진 못해요.", "bye"]]},
+  bye: {scene: "🚀 작별", who: "외계인 Zorp", en: "Thank you, human. Earth is strange, but I like it. May I come back?", ko: "고맙다, 인간. 지구는 이상하지만 마음에 든다. 다시 와도 되는가?",
+    opts: [["Of course! Next time, let's get coffee together.", "물론이죠! 다음엔 같이 커피 마셔요.", "end"], ["Anytime. Just don't land on the highway again.", "언제든지요. 다만 고속도로에 또 착륙하진 마세요.", "end"]]},
+  end: {who: "🎉 완료", en: "Zorp flew home with a full report about Earth. Great job!", ko: "조프가 지구 보고서를 들고 고향으로 돌아갔어요. 잘했어요!", end: true},
+ }},
+ redcarpet: {title: "🎬 할리우드 레드카펫 인터뷰", nodes: {
+  start: {scene: "📸 레드카펫", who: "기자 Jessica", en: "Congratulations on winning at Cannes! How does it feel?", ko: "칸 수상 축하드려요! 기분이 어떠세요?",
+    opts: [["Thank you! It still doesn't feel real.", "감사합니다! 아직도 실감이 안 나요.", "film"], ["I'm so honored. I want to thank my whole team.", "정말 영광이에요. 팀 전체에 감사하고 싶어요.", "team"]]},
+  team: {who: "기자 Jessica", en: "That's lovely. Is there anyone special you want to thank?", ko: "멋지네요. 특별히 감사하고 싶은 분이 있나요?",
+    opts: [["My mother. She always believed in me.", "저희 어머니요. 항상 저를 믿어 주셨어요.", "film"], ["My lead actor. He gave everything to this role.", "주연 배우요. 이 역할에 모든 걸 바쳤어요.", "film"]]},
+  film: {scene: "🎞️ 작품 이야기", who: "기자 Jessica", en: "For those who haven't seen it, what is your film about?", ko: "아직 못 본 분들을 위해, 어떤 영화인지 소개해 주시겠어요?",
+    opts: [["It's about a family that runs a small restaurant in Seoul.", "서울에서 작은 식당을 하는 가족 이야기예요.", "idea"], ["It's a thriller about a woman who can't forget anything.", "아무것도 잊지 못하는 여자에 관한 스릴러예요.", "idea"]]},
+  idea: {who: "기자 Jessica", en: "Where did the idea come from?", ko: "아이디어는 어디서 얻으셨어요?",
+    opts: [["It came from my own childhood memories.", "제 어린 시절 기억에서 나왔어요.", "personal"], ["I read a small news article, and I couldn't stop thinking about it.", "작은 신문 기사를 읽었는데 계속 생각이 났어요.", "rumor"]]},
+  personal: {who: "기자 Jessica", en: "So it's a personal story. Was it hard to make?", ko: "그럼 개인적인 이야기네요. 만들기 힘들었나요?",
+    opts: [["Yes, some scenes were really emotional for me.", "네, 어떤 장면은 정말 감정적으로 힘들었어요.", "rumor"]]},
+  rumor: {scene: "😬 곤란한 질문", who: "기자 Mark", en: "There are rumors that you fought with the producer. Is that true?", ko: "프로듀서와 싸웠다는 소문이 있던데, 사실인가요?",
+    opts: [["We had different opinions, but that's normal in filmmaking.", "의견이 달랐지만, 영화 만들 때는 흔한 일이에요.", "next"], ["I'd rather talk about the film tonight.", "오늘 밤은 영화 이야기를 하고 싶어요.", "dodge"]]},
+  dodge: {who: "기자 Mark", en: "Fair enough. Just one more question, then.", ko: "좋아요. 그럼 질문 하나만 더 할게요.",
+    opts: [["Sure, go ahead.", "네, 하세요.", "next"]]},
+  next: {who: "기자 Jessica", en: "What's next for you? Any plans for a Hollywood movie?", ko: "다음 계획은요? 할리우드 영화 계획도 있나요?",
+    opts: [["I can't say much yet, but something exciting is coming.", "아직 많이 말할 순 없지만, 흥미로운 게 준비 중이에요.", "fans"], ["I'd love to, but I want to keep telling Korean stories.", "하고 싶지만, 한국 이야기를 계속 하고 싶어요.", "fans"]]},
+  fans: {who: "기자 Jessica", en: "Finally, any message for your fans around the world?", ko: "마지막으로, 전 세계 팬들에게 한마디 해 주시겠어요?",
+    opts: [["Thank you for watching. Your support means everything.", "봐 주셔서 감사해요. 여러분의 응원이 전부예요.", "end"], ["Keep watching Korean films. There's so much more to come.", "한국 영화 계속 봐 주세요. 앞으로 더 많이 나올 거예요.", "end"]]},
+  end: {who: "🎉 완료", en: "The interview went viral, and fans loved your answers. Great job!", ko: "인터뷰가 화제가 됐고 팬들이 답변을 좋아했어요. 잘했어요!", end: true},
+ }},
+ kimchi: {title: "🛃 세관에서 김치 10kg 걸림", nodes: {
+  start: {scene: "🛃 세관 검사대", who: "세관 직원", en: "Excuse me, please put your suitcase on the table. What's inside this big box?", ko: "실례합니다, 가방을 테이블에 올려 주세요. 이 큰 상자 안에 뭐가 있죠?",
+    opts: [["It's kimchi. My mom made it for me.", "김치예요. 엄마가 만들어 주셨어요.", "what"], ["It's just some Korean food.", "그냥 한국 음식이에요.", "vague"]]},
+  vague: {who: "세관 직원", en: "What kind of food exactly? I need to know.", ko: "정확히 어떤 음식이죠? 알아야 해요.",
+    opts: [["Sorry, it's kimchi. It's fermented cabbage.", "죄송해요, 김치예요. 발효시킨 배추예요.", "what"]]},
+  what: {who: "세관 직원", en: "Kimchi? What is that, and why does it smell so strong?", ko: "김치요? 그게 뭔데 냄새가 이렇게 강하죠?",
+    opts: [["It's fermented cabbage with chili and garlic. The smell is normal.", "고추와 마늘을 넣고 발효시킨 배추예요. 냄새는 정상이에요.", "weight"], ["It's a traditional Korean side dish. We eat it with every meal.", "한국 전통 반찬이에요. 끼니마다 먹어요.", "weight"]]},
+  weight: {scene: "⚖️ 10킬로그램?!", who: "세관 직원", en: "This box weighs ten kilograms. That's a lot of kimchi for one person.", ko: "이 상자가 10킬로그램이에요. 한 사람이 먹기엔 김치가 너무 많네요.",
+    opts: [["I'm staying for six months, and I can't live without it.", "6개월 머무는데, 김치 없이는 못 살아요.", "personal"], ["Some of it is a gift for my friends here.", "일부는 여기 친구들 줄 선물이에요.", "gift"]]},
+  personal: {who: "세관 직원", en: "Six months? So it's for personal use only? You're not selling it?", ko: "6개월이요? 그럼 개인용으로만 쓰는 거죠? 파는 거 아니죠?",
+    opts: [["No, it's only for me. I promise.", "아뇨, 저만 먹을 거예요. 약속해요.", "meat"]]},
+  gift: {who: "세관 직원", en: "Gifts are okay, but you can't sell it. Understood?", ko: "선물은 괜찮지만 팔면 안 돼요. 알겠죠?",
+    opts: [["Of course. I'm not selling anything.", "물론이죠. 아무것도 안 팔아요.", "meat"]]},
+  meat: {scene: "🔍 마지막 확인", who: "세관 직원", en: "Does it contain any meat or seafood?", ko: "고기나 해산물이 들어 있나요?",
+    opts: [["There's a little fish sauce, but no meat.", "액젓이 조금 들어가지만 고기는 없어요.", "fishSauce"], ["No, it's just vegetables and spices.", "아뇨, 채소와 양념뿐이에요.", "declare"]]},
+  fishSauce: {who: "세관 직원", en: "Thank you for being honest. Fish sauce is fine. Please seal the box tightly.", ko: "솔직하게 말해 줘서 고마워요. 액젓은 괜찮아요. 상자는 단단히 봉해 주세요.",
+    opts: [["I will. Thank you so much!", "그럴게요. 정말 감사합니다!", "pass"]]},
+  declare: {who: "세관 직원", en: "All right. Next time, please write food items on your customs form.", ko: "좋아요. 다음부터는 세관 신고서에 음식을 적어 주세요.",
+    opts: [["Sorry, I didn't know. I'll do that next time.", "죄송해요, 몰랐어요. 다음엔 꼭 적을게요.", "pass"]]},
+  pass: {who: "세관 직원", en: "You're free to go. By the way, where can I buy good kimchi in this city?", ko: "가셔도 됩니다. 그런데 이 도시에서 맛있는 김치는 어디서 사요?",
+    opts: [["Try the Korean market downtown. It's really good.", "시내 한인 마트에 가 보세요. 정말 맛있어요.", "end"], ["Honestly, nothing beats my mom's kimchi.", "솔직히 우리 엄마 김치를 이길 순 없죠.", "end"]]},
+  end: {who: "🎉 완료", en: "Your kimchi made it through customs safely. Great job!", ko: "김치가 무사히 세관을 통과했어요. 잘했어요!", end: true},
+ }},
+};
+let STORY = STORIES.trip.nodes;
+
+// 위쪽 난이도는 롤플레이와 뉴스에만 쓴다 (오늘의 문장은 '문장 종류'로 고름)
+const LEVEL_HINT = {
+  easy: "초급: 롤플레이 보기를 영어+한국어로 보여 주고, 뉴스는 짧은 제목으로 연습해요.",
+  mid: "중급: 롤플레이 보기는 영어만, 상대 말 해석은 접어 둬요. 뉴스는 요약문으로 연습해요.",
+  hard: "고급: 롤플레이 보기는 한국어만 보여 줘요. 영어로 직접 말해 보세요. 뉴스는 요약문으로 연습해요.",
+};
+const PASS = 80; // 통과 기준 %
+const MATCH = 0.5; // 롤플레이 보기와 이만큼 비슷하면 그 보기로 인정
+
+const $ = s => document.querySelector(s);
+const esc = s => s.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+
+// ---------- 문장 비교 ----------
+const NUM = ["zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve"];
+// shortcut: 숫자는 0~12만 영어 단어로 바꾼다. 큰 숫자가 든 문장을 넣으면 그때 늘릴 것
+function words(s) {
+  // normalize+replace: café → cafe 처럼 악센트를 뗀다
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/['’‘]/g, "").replace(/[^a-z0-9]+/g, " ").split(" ").filter(Boolean)
+    .map(w => /^\d+$/.test(w) && NUM[w] ? NUM[w] : w);
+}
+// a의 각 단어가 b와의 최장 공통 부분열에 들어가는지 표시
+function lcsHits(a, b) {
+  const d = Array.from({length: a.length + 1}, () => new Array(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--)
+    for (let j = b.length - 1; j >= 0; j--)
+      d[i][j] = a[i] === b[j] ? d[i + 1][j + 1] + 1 : Math.max(d[i + 1][j], d[i][j + 1]);
+  const hit = new Array(a.length).fill(false);
+  for (let i = 0, j = 0; i < a.length && j < b.length;) {
+    if (a[i] === b[j]) { hit[i] = true; i++; j++; }
+    else if (d[i + 1][j] >= d[i][j + 1]) i++; else j++;
+  }
+  return hit;
+}
+function grade(target, heard) {
+  const tokens = target.split(" "), t = [], owner = [];
+  tokens.forEach((tok, i) => words(tok).forEach(w => { t.push(w); owner.push(i); }));
+  const hit = lcsHits(t, words(heard));
+  const tokOk = tokens.map((_, i) => owner.every((o, k) => o !== i || hit[k]));
+  return {tokens, tokOk, pct: Math.round(100 * hit.filter(Boolean).length / t.length)};
+}
+function similarity(a, b) {
+  const x = words(a), y = words(b);
+  return x.length + y.length ? 2 * lcsHits(x, y).filter(Boolean).length / (x.length + y.length) : 0;
+}
+
+// ---------- 소리 ----------
+function speak(text) {
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "en-US";
+  u.rate = $("#slow").checked ? 0.7 : 1;
+  const v = speechSynthesis.getVoices().find(v => /^en[-_]US/.test(v.lang));
+  if (v) u.voice = v;
+  speechSynthesis.speak(u);
+}
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let listening = false;
+// onText에는 인식 후보 문장 배열이 온다. 못 들었으면 빈 배열
+function listen(onText, btn) {
+  if (!SR) { alert("이 브라우저는 음성 인식을 지원하지 않아요. 크롬이나 엣지에서 열어 주세요."); return; }
+  if (listening) return;
+  speechSynthesis.cancel();
+  const r = new SR();
+  r.lang = "en-US"; r.maxAlternatives = 3; r.interimResults = false;
+  const label = btn.textContent;
+  let got = null;
+  listening = true; btn.textContent = "🔴 듣는 중..."; btn.disabled = true;
+  r.onresult = e => { got = [...e.results[0]].map(a => a.transcript); };
+  r.onerror = e => {
+    if (e.error === "not-allowed") alert("마이크 권한을 허용해 주세요.");
+    else if (e.error === "network") alert("인터넷 연결이 필요해요.");
+  };
+  r.onend = () => { listening = false; btn.textContent = label; btn.disabled = false; onText(got || []); };
+  r.start();
+}
+
+// ---------- 오늘의 문장 ----------
+function todays(list) {
+  const d = new Date();
+  let seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  const rand = () => { seed = seed * 16807 % 2147483647; return seed / 2147483647; };
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a.slice(0, 10);
+}
+let passed = new Set();
+function updateCount() { $("#count").textContent = `오늘 통과: ${passed.size} / 10`; }
+// 듣기 + 따라 말하기 카드. sub는 문장 아래에 붙는 HTML
+function practiceCard(label, en, sub, onPass = () => {}) {
+  const c = document.createElement("div");
+  c.className = "card";
+  c.innerHTML = `<div class="en">${label}${esc(en)}</div>${sub}
+    <div class="row"><button>🔊 듣기</button><button class="primary">🎤 따라 말하기</button></div><div class="result"></div>`;
+  const [play, mic] = c.querySelectorAll(".row button"), res = c.querySelector(".result");
+  play.onclick = () => speak(en);
+  mic.onclick = () => listen(alts => {
+    if (!alts.length) { res.textContent = "소리를 못 들었어요. 다시 해 보세요."; return; }
+    const best = alts.map(a => ({a, g: grade(en, a)})).sort((x, y) => y.g.pct - x.g.pct)[0];
+    const ok = best.g.pct >= PASS;
+    if (ok) onPass();
+    res.innerHTML = `<span class="${ok ? "pass" : "fail"}">${best.g.pct}% ${ok ? "통과!" : "다시 도전"}</span><br>`
+      + best.g.tokens.map((t, k) => `<span class="${best.g.tokOk[k] ? "w-ok" : "w-miss"}">${esc(t)}</span>`).join(" ")
+      + `<div class="ko">들린 말: ${esc(best.a)}</div>`;
+  }, mic);
+  return c;
+}
+// 인터넷 문장: Tatoeba(무료 공개 예문, 한국어 번역 포함, 키 필요 없음). MZ 슬랭은 믿을 만한 무료 출처가 없어 내장 목록만 쓴다
+const ONLINE = {
+  mid: "&word_count=6-10",
+  hard: "&word_count=11-",
+  travel: "&q=" + encodeURIComponent("hotel|airport|ticket|passport|restaurant|taxi|train|station|bus|flight|luggage|baggage|reservation|menu|museum|subway|souvenir|travel|trip|tour"),
+};
+async function onlineSentences(kind) {
+  const r = await fetch("https://api.tatoeba.org/unstable/sentences?lang=eng&trans:lang=kor&sort=random&limit=40" + ONLINE[kind]);
+  if (!r.ok) throw new Error("Tatoeba " + r.status);
+  return (await r.json()).data
+    .filter(d => !d.is_unapproved)
+    .map(d => [d.text, ((d.translations || []).flat().find(t => t.lang === "kor") || {}).text])
+    .filter(([en, ko]) => en && ko)
+    .slice(0, 10);
+}
+// fresh: 🔄 새 문장을 눌렀을 때. 내장 목록(MZ)은 오늘 순서 대신 무작위로 섞는다
+async function renderDaily(fresh = false) {
+  const kind = $("#kind").value, today = new Date().toDateString(), cacheKey = `daily:${today}:${kind}`;
+  passed = new Set(); updateCount();
+  let list = null;
+  if (ONLINE[kind]) {
+    $("#dailySrc").textContent = "인터넷에서 오늘의 문장을 가져오는 중...";
+    try { list = JSON.parse(localStorage.getItem(cacheKey)); } catch (e) {}
+    if (!list) {
+      try {
+        list = await onlineSentences(kind);
+        try {
+          Object.keys(localStorage).filter(k => k.startsWith("daily:") && !k.startsWith(`daily:${today}:`)).forEach(k => localStorage.removeItem(k));
+          localStorage.setItem(cacheKey, JSON.stringify(list)); // 같은 날 다시 열어도 같은 문장
+        } catch (e) {}
+      } catch (e) { list = null; }
+    }
+    if (kind !== $("#kind").value) return; // 기다리는 사이 다른 종류를 골랐으면 버린다
+  }
+  $("#dailySrc").innerHTML = !ONLINE[kind] ? "내장 표현 목록 (날짜마다 10개씩 바뀌어요)"
+    : list ? `출처: <a href="https://tatoeba.org" target="_blank" rel="noopener">Tatoeba</a> 공개 예문 (CC BY 2.0 FR) · 매일 새 문장`
+    : "인터넷에 연결되지 않아 내장 문장을 보여 줘요.";
+  const builtin = fresh ? SENTENCES[kind].slice().sort(() => Math.random() - 0.5) : todays(SENTENCES[kind]);
+  if (!list || list.length < 10) list = (list || []).concat(builtin).slice(0, 10); // 모자라면 내장 문장으로 채움
+  const box = $("#cards"); box.innerHTML = "";
+  list.forEach(([en, ko], i) =>
+    box.append(practiceCard(`${i + 1}. `, en, `<div class="ko">${esc(ko)}</div>`, () => { passed.add(i); updateCount(); })));
+}
+$("#dailyNew").onclick = () => {
+  try { localStorage.removeItem(`daily:${new Date().toDateString()}:${$("#kind").value}`); } catch (e) {}
+  renderDaily(true);
+};
+
+// ---------- 오늘의 뉴스 (NYT RSS, 키 필요 없음) ----------
+// shortcut: NYT RSS가 브라우저 직접 호출을 허용해서 서버 없이 된다. 막히면 중간 서버가 필요
+try { localStorage.removeItem("nytKey"); } catch (e) {} // 예전 버전에서 저장한 API 키 정리
+let news = null; // 마지막으로 불러온 기사 목록
+async function loadNews() {
+  $("#newsMsg").textContent = "불러오는 중...";
+  try {
+    const sec = $("#section").value;
+    const r = await fetch(`https://rss.nytimes.com/services/xml/rss/nyt/${sec}.xml`);
+    if (!r.ok) throw new Error(`NYT 서버 오류 (${r.status}). 잠시 후 다시 해 보세요.`);
+    const xml = await r.text();
+    if (sec !== $("#section").value) return; // 그새 다른 분야를 골랐으면 늦게 온 응답은 버린다
+    const doc = new DOMParser().parseFromString(xml, "text/xml");
+    const text = (item, tag) => (item.querySelector(tag)?.textContent || "").trim();
+    news = [...doc.querySelectorAll("item")]
+      .map(i => ({title: text(i, "title"), abstract: text(i, "description"), url: text(i, "link")}))
+      .filter(a => a.title && a.abstract && /^https:\/\//.test(a.url))
+      .slice(0, 10);
+    $("#newsMsg").textContent = news.length ? "" : "기사를 찾지 못했어요. 다른 분야를 골라 보세요.";
+    renderNews();
+  } catch (e) {
+    $("#newsMsg").textContent = e instanceof TypeError ? "인터넷 연결을 확인해 주세요." : e.message;
+  }
+}
+// 크롬 내장 번역기(기기 안에서 번역)를 먼저 쓰고, 없으면 키 없는 무료 번역(MyMemory, 하루 글자 수 제한)을 쓴다
+const transCache = new Map();
+let builtinTranslator = null;
+async function translate(text) {
+  if (transCache.has(text)) return transCache.get(text);
+  let ko = null;
+  if ("Translator" in self) {
+    try {
+      builtinTranslator ??= Translator.create({sourceLanguage: "en", targetLanguage: "ko"});
+      ko = await (await builtinTranslator).translate(text);
+    } catch (e) { builtinTranslator = null; }
+  }
+  const myMemory = async q => {
+    const j = await (await fetch("https://api.mymemory.translated.net/get?langpair=en|ko&q=" + encodeURIComponent(q))).json();
+    if (j.responseStatus != 200) throw new Error("오늘 무료 번역 한도를 다 썼어요. 내일 다시 해 보세요.");
+    return new DOMParser().parseFromString(j.responseData.translatedText, "text/html").documentElement.textContent; // &#39; 같은 문자 풀기
+  };
+  if (ko == null) {
+    ko = await myMemory(text);
+    if (ko.trim() === text.trim()) ko = await myMemory(text.toLowerCase()); // 대문자 많은 제목은 가끔 원문 그대로 돌려줘서 한 번 더
+  }
+  transCache.set(text, ko);
+  return ko;
+}
+// 초급은 짧은 제목, 중급·고급은 요약문으로 따라 말하기
+function renderNews() {
+  const box = $("#newsCards"); box.innerHTML = "";
+  if (!news) return;
+  const easy = $("#level").value === "easy";
+  news.forEach((a, i) => {
+    const c = practiceCard(`${i + 1}. `, easy ? a.title : a.abstract,
+      `<div class="ko">${esc(easy ? a.abstract : a.title)} · <a href="${esc(a.url)}" target="_blank" rel="noopener">NYT에서 읽기</a></div>`);
+    const btn = document.createElement("button"), out = document.createElement("div");
+    btn.textContent = "🇰🇷 해석 보기";
+    out.className = "trans"; out.hidden = true;
+    c.querySelector(".row").append(btn);
+    c.querySelector(".result").before(out);
+    let done = false;
+    btn.onclick = async () => {
+      if (done) { out.hidden = !out.hidden; btn.textContent = out.hidden ? "🇰🇷 해석 보기" : "🇰🇷 해석 숨기기"; return; }
+      btn.disabled = true; out.hidden = false; out.textContent = "번역 중...";
+      try {
+        const [t, s] = await Promise.all([translate(a.title), translate(a.abstract)]);
+        out.innerHTML = `<b>${esc(t)}</b><br>${esc(s)}`;
+        done = true; btn.textContent = "🇰🇷 해석 숨기기";
+      } catch (e) {
+        out.textContent = e instanceof TypeError ? "인터넷 연결을 확인해 주세요." : e.message;
+      }
+      btn.disabled = false;
+    };
+    box.append(c);
+  });
+}
+$("#newsLoad").onclick = loadNews;
+$("#section").onchange = loadNews;
+
+// ---------- 롤플레이 ----------
+let node = "start", log = [], reveal = false;
+function startStory() { node = "start"; log = []; showNode(); }
+function showNode() {
+  const n = STORY[node];
+  if (n.scene) log.push({scene: n.scene});
+  log.push({who: n.who, en: n.en, ko: n.ko});
+  reveal = false;
+  renderStory();
+  speak(n.en);
+}
+function choose(i, heard) {
+  const o = STORY[node].opts[i];
+  log.push({me: true, en: heard || o[0]});
+  node = o[2];
+  showNode();
+}
+function renderStory(msg = "") {
+  const n = STORY[node], lv = $("#level").value;
+  $("#log").innerHTML = log.map(m =>
+    m.scene ? `<div class="scene">${m.scene}</div>`
+    : m.me ? `<div class="bubble me">${esc(m.en)}</div>`
+    : `<div class="bubble"><b>${m.who}</b><br>${esc(m.en)}`
+      + (lv === "easy" ? `<div class="ko">${m.ko}</div>` : `<details><summary>해석</summary><div class="ko">${m.ko}</div></details>`)
+      + `</div>`).join("");
+  const box = $("#choices");
+  if (n.end) {
+    box.innerHTML = `<button class="primary">🔁 처음부터 다시</button>`;
+    box.querySelector("button").onclick = startStory;
+  } else {
+    const showEn = lv !== "hard" || reveal, showKo = lv !== "mid" || reveal;
+    box.innerHTML = `<div class="ko">이렇게 말해 보세요 (눌러서 고를 수도 있어요)</div>`
+      + n.opts.map(o => `<div class="optrow"><button class="opt">${showEn ? `<b>${esc(o[0])}</b>` : ""}${showEn && showKo ? "<br>" : ""}${showKo ? `<span class="ko">${o[1]}</span>` : ""}</button>`
+        + (showEn ? `<button class="say" aria-label="발음 듣기">🔊</button>` : "") + `</div>`).join("")
+      + `<div class="row"><button class="primary" id="rpMic">🎤 말하기</button>`
+      + (showEn && showKo ? "" : `<button id="rpReveal">💡 정답 보기</button>`)
+      + `<button id="rpPlay">🔊 다시 듣기</button><button id="rpReset">🔁 처음부터</button></div>
+      <div id="rpmsg">${esc(msg)}</div>`;
+    box.querySelectorAll(".opt").forEach((b, i) => b.onclick = () => choose(i));
+    box.querySelectorAll(".say").forEach((b, i) => b.onclick = () => speak(n.opts[i][0]));
+    if ($("#rpReveal")) $("#rpReveal").onclick = () => { reveal = true; renderStory(); };
+    $("#rpPlay").onclick = () => speak(n.en);
+    $("#rpReset").onclick = startStory;
+    $("#rpMic").onclick = () => listen(alts => {
+      let best = {s: 0};
+      alts.forEach(a => n.opts.forEach((o, i) => { const s = similarity(o[0], a); if (s > best.s) best = {s, i, a}; }));
+      if (best.s >= MATCH) return choose(best.i, best.a);
+      reveal = true;
+      speak("Sorry?");
+      renderStory(alts.length ? `"${alts[0]}" — 잘 못 알아들었대요. 보기 중 하나로 다시 말해 보세요.` : "소리를 못 들었어요. 다시 해 보세요.");
+    }, $("#rpMic"));
+  }
+  box.scrollIntoView({block: "nearest"});
+}
+
+// ---------- 화면 연결 ----------
+function setLevel(lv) {
+  try { localStorage.setItem("level", lv); } catch (e) {}
+  $("#levelHint").textContent = LEVEL_HINT[lv];
+  if (log.length) renderStory();
+  renderNews();
+}
+function tab(which) {
+  for (const t of ["daily", "story", "news"]) {
+    $("#" + t).hidden = which !== t;
+    $("#tab" + t[0].toUpperCase() + t.slice(1)).classList.toggle("on", which === t);
+  }
+  if (which === "story" && !log.length) startStory();
+  if (which === "news" && !news) loadNews();
+}
+$("#tabDaily").onclick = () => tab("daily");
+$("#tabStory").onclick = () => tab("story");
+$("#tabNews").onclick = () => tab("news");
+$("#level").onchange = e => setLevel(e.target.value);
+$("#storyPick").innerHTML = Object.entries(STORIES).map(([k, s]) => `<option value="${k}">${s.title}</option>`).join("");
+$("#storyPick").onchange = e => { STORY = STORIES[e.target.value].nodes; startStory(); };
+if (!SR) $("#warn").style.display = "block";
+speechSynthesis.getVoices(); // 일부 브라우저는 목소리 목록을 미리 불러 둬야 한다
+
+let saved = "easy";
+try { saved = localStorage.getItem("level") || "easy"; } catch (e) {}
+if (!LEVEL_HINT[saved]) saved = "easy";
+$("#level").value = saved;
+setLevel(saved);
+
+let kind = "mid";
+try { kind = localStorage.getItem("kind") || "mid"; } catch (e) {}
+if (!SENTENCES[kind]) kind = "mid";
+$("#kind").value = kind;
+$("#kind").onchange = e => { try { localStorage.setItem("kind", e.target.value); } catch (err) {} renderDaily(); };
+renderDaily();
+
+// ---------- 자가 점검 (개발자 도구 콘솔에서 확인) ----------
+(function selfTest() {
+  const ok = (c, m) => console.assert(c, "selfTest 실패: " + m);
+  ok(grade("I'm on my way.", "I'm on my way").pct === 100, "완전 일치");
+  ok(grade("I'm on my way.", "on my way").pct === 75, "한 단어 빠짐");
+  ok(grade("I'm on my way.", "on my way").tokOk.join() === "false,true,true,true", "빠진 단어 표시");
+  ok(grade("You'd better double-check the reservation before we leave.", "you'd better double check the reservation before we leave").pct === 100, "하이픈");
+  ok(grade("I've been learning English for two years.", "I've been learning English for 2 years").pct === 100, "숫자");
+  ok(similarity("Yes, under the name Kim.", "yes under the name Kim") > similarity("No. Do you have any rooms available?", "yes under the name Kim"), "보기 고르기");
+  for (const [key, {nodes}] of Object.entries(STORIES)) for (const [id, n] of Object.entries(nodes)) {
+    ok(n.end || n.opts.every(o => nodes[o[2]]), `없는 다음 장면: ${key}.${id}`);
+    ok(Object.values(nodes).some(m => m.opts && m.opts.some(o => o[2] === id)) || id === "start", `닿지 않는 장면: ${key}.${id}`);
+  }
+  console.log("selfTest 끝");
+})();
+</script>
+</body>
+</html>
